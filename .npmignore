@@ -1,0 +1,19 @@
+# Source is shipped (so consumers can read it), but build artifacts and
+# anything development-only is excluded.
+
+tests/
+bench/
+examples/
+.github/
+node_modules/
+coverage/
+.tsbuildinfo
+*.tgz
+*.swp
+.DS_Store
+.idea/
+.vscode/
+.env
+.env.*
+.eslintcache
+tsconfig.tsbuildinfo

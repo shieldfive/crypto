@@ -1,0 +1,112 @@
+{
+  "name": "@shieldfive/crypto",
+  "version": "1.0.0-alpha.3",
+  "description": "Open, audited-ready, post-quantum-hybrid client-side encryption for cloud storage. The cryptographic core of ShieldFive.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/shieldfive/crypto",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shieldfive/crypto.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shieldfive/crypto/issues",
+    "email": "security@shieldfive.com"
+  },
+  "keywords": [
+    "encryption",
+    "zero-knowledge",
+    "end-to-end-encryption",
+    "post-quantum",
+    "ml-kem",
+    "kyber",
+    "xchacha20-poly1305",
+    "aes-gcm",
+    "webcrypto",
+    "cloud-storage"
+  ],
+  "author": "ShieldFive Labs <security@shieldfive.com>",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json",
+    "./aes-gcm-v1": {
+      "types": "./dist/suites/aes-gcm-v1/api.d.ts",
+      "default": "./dist/suites/aes-gcm-v1/api.js"
+    },
+    "./xchacha-v1": {
+      "types": "./dist/suites/xchacha-v1/api.d.ts",
+      "default": "./dist/suites/xchacha-v1/api.js"
+    },
+    "./pq-hybrid-v1": {
+      "types": "./dist/suites/pq-hybrid-v1/api.d.ts",
+      "default": "./dist/suites/pq-hybrid-v1/api.js"
+    },
+    "./legacy-v0": {
+      "types": "./dist/suites/aes-gcm-v0/api.d.ts",
+      "default": "./dist/suites/aes-gcm-v0/api.js"
+    },
+    "./streams/aes-gcm-v1": {
+      "types": "./dist/streams/aes-gcm-v1.d.ts",
+      "default": "./dist/streams/aes-gcm-v1.js"
+    },
+    "./kdf/argon2id": {
+      "types": "./dist/kdf/argon2id.d.ts",
+      "default": "./dist/kdf/argon2id.js"
+    },
+    "./identity": {
+      "types": "./dist/identity/index.d.ts",
+      "default": "./dist/identity/index.js"
+    },
+    "./migration/v0": {
+      "types": "./dist/migration/v0-bridge.d.ts",
+      "default": "./dist/migration/v0-bridge.js"
+    },
+    "./format": {
+      "types": "./dist/format/header.d.ts",
+      "default": "./dist/format/header.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "spec",
+    "workers",
+    "README.md",
+    "SECURITY.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "lint": "eslint src tests",
+    "test": "node --experimental-vm-modules --test --import tsx tests/**/*.test.ts",
+    "test:unit": "node --experimental-vm-modules --test --import tsx tests/unit/*.test.ts",
+    "test:integration": "node --experimental-vm-modules --test --import tsx tests/integration/*.test.ts",
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\""
+  },
+  "peerDependencies": {
+    "libsodium-wrappers-sumo": "^0.8.2"
+  },
+  "peerDependenciesMeta": {
+    "libsodium-wrappers-sumo": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@noble/post-quantum": "^0.5.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "libsodium-wrappers-sumo": "^0.8.2",
+    "tsx": "^4.20.0",
+    "typescript": "^5.7.2"
+  }
+}

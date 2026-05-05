@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@shieldfive/crypto — browser demo</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --fg: #1a1a1a;
+        --fg-muted: #555;
+        --bg: #fafafa;
+        --bg-elev: #fff;
+        --accent: #2a5d8f;
+        --ok: #1f7a3a;
+        --err: #b31b1b;
+        --border: #e2e2e2;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fg: #e8e8e8;
+          --fg-muted: #a8a8a8;
+          --bg: #141414;
+          --bg-elev: #1e1e1e;
+          --accent: #6cb3ff;
+          --ok: #5cd07a;
+          --err: #ff7676;
+          --border: #2a2a2a;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        color: var(--fg);
+        background: var(--bg);
+        margin: 0;
+        padding: 32px 16px;
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0 0 4px;
+        font-weight: 600;
+      }
+      .lede {
+        color: var(--fg-muted);
+        margin: 0 0 24px;
+      }
+      section {
+        background: var(--bg-elev);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 18px 20px;
+        margin-bottom: 16px;
+      }
+      h2 {
+        font-size: 15px;
+        margin: 0 0 12px;
+        font-weight: 600;
+      }
+      label {
+        display: block;
+        margin-top: 10px;
+        font-size: 13px;
+        color: var(--fg-muted);
+      }
+      select,
+      input[type='file'],
+      button {
+        font: inherit;
+        padding: 8px 12px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg);
+        color: var(--fg);
+        margin-top: 6px;
+      }
+      button {
+        cursor: pointer;
+        border-color: var(--accent);
+        color: var(--accent);
+        font-weight: 500;
+      }
+      button:hover:not(:disabled) {
+        background: var(--accent);
+        color: white;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      progress {
+        width: 100%;
+        margin-top: 8px;
+      }
+      pre {
+        white-space: pre-wrap;
+        word-break: break-all;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 10px;
+        font: 12px/1.4 ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+        margin: 8px 0 0;
+      }
+      .ok {
+        color: var(--ok);
+      }
+      .err {
+        color: var(--err);
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .key {
+        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--fg-muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>@shieldfive/crypto — browser demo</h1>
+      <p class="lede">
+        Pick a file, encrypt it client-side, then decrypt it back. Everything
+        runs in this page; nothing leaves your browser. Refresh to clear state.
+      </p>
+
+      <section>
+        <h2>1 · Choose suite &amp; file</h2>
+        <label for="suite">Cipher suite</label>
+        <select id="suite">
+          <option value="aes-gcm-v1">aes-256-gcm-v1 (WebCrypto only)</option>
+          <option value="xchacha-v1">xchacha20-poly1305-v1 (libsodium)</option>
+          <option value="pq-hybrid-v1" selected>
+            pq-hybrid-xchacha-mlkem1024-v1 (default)
+          </option>
+        </select>
+
+        <label for="file">File to encrypt</label>
+        <input type="file" id="file" />
+      </section>
+
+      <section>
+        <h2>2 · Encrypt</h2>
+        <div class="row">
+          <button id="encrypt" disabled>Encrypt</button>
+          <a id="downloadEnc" hidden>Download encrypted blob</a>
+        </div>
+        <progress id="encProgress" value="0" max="1" hidden></progress>
+        <pre id="encOut" hidden></pre>
+      </section>
+
+      <section>
+        <h2>3 · Decrypt</h2>
+        <div class="row">
+          <button id="decrypt" disabled>Decrypt</button>
+          <a id="downloadDec" hidden>Download recovered plaintext</a>
+        </div>
+        <progress id="decProgress" value="0" max="1" hidden></progress>
+        <pre id="decOut" hidden></pre>
+      </section>
+
+      <p class="lede" style="margin-top: 24px; font-size: 13px">
+        For development: this demo loads the library from
+        <code>../../src/index.ts</code> via a bundler (vite, esbuild) — open
+        with <code>npx serve</code> after building, or wire it into your own
+        dev server. For a published-package demo, change the import to
+        <code>@shieldfive/crypto</code>.
+      </p>
+    </main>
+
+    <script type="module">
+      // In a real deployment, replace with `from '@shieldfive/crypto'`.
+      // For local development, run a bundler that resolves the path below.
+      import * as sf from '../../dist/index.js'
+
+      const $ = (id) => document.getElementById(id)
+      const fileInput = $('file')
+      const suiteSelect = $('suite')
+      const encryptBtn = $('encrypt')
+      const decryptBtn = $('decrypt')
+      const encProgress = $('encProgress')
+      const decProgress = $('decProgress')
+      const encOut = $('encOut')
+      const decOut = $('decOut')
+      const downloadEnc = $('downloadEnc')
+      const downloadDec = $('downloadDec')
+
+      let encryptedBlob = null
+      let decryptInputs = null
+
+      function bytesToB64(bytes) {
+        return sf.bytesToBase64(bytes).slice(0, 24) + '…'
+      }
+
+      fileInput.addEventListener('change', () => {
+        encryptBtn.disabled = !fileInput.files?.length
+        decryptBtn.disabled = true
+        encOut.hidden = true
+        decOut.hidden = true
+        downloadEnc.hidden = true
+        downloadDec.hidden = true
+      })
+
+      encryptBtn.addEventListener('click', async () => {
+        const file = fileInput.files[0]
+        if (!file) return
+        encryptBtn.disabled = true
+        encProgress.hidden = false
+        encProgress.value = 0
+        encOut.hidden = true
+
+        try {
+          const onProgress = (p) => {
+            encProgress.value = p
+          }
+          const suite = suiteSelect.value
+
+          if (suite === 'aes-gcm-v1') {
+            const r = await sf.aesGcmV1.encryptBlob({
+              blob: file,
+              chunkSize: 1024 * 1024,
+              onProgress,
+            })
+            encryptedBlob = r.blob
+            decryptInputs = { kind: 'classical', contentKey: r.contentKey }
+            encOut.textContent =
+              `suite: aes-256-gcm-v1\n` +
+              `chunks: ${r.totalChunks}\n` +
+              `plaintext: ${r.plaintextSize} B\n` +
+              `ciphertext: ${r.blob.size} B\n` +
+              `content key: ${bytesToB64(r.contentKey)}`
+          } else if (suite === 'xchacha-v1') {
+            const r = await sf.xchachaV1.encryptBlob({
+              blob: file,
+              chunkSize: 1024 * 1024,
+              onProgress,
+            })
+            encryptedBlob = r.blob
+            decryptInputs = { kind: 'classical', contentKey: r.contentKey }
+            encOut.textContent =
+              `suite: xchacha20-poly1305-v1\n` +
+              `chunks: ${r.totalChunks}\n` +
+              `plaintext: ${r.plaintextSize} B\n` +
+              `ciphertext: ${r.blob.size} B\n` +
+              `content key: ${bytesToB64(r.contentKey)}`
+          } else {
+            // pq-hybrid-v1
+            const { publicKey, secretKey } =
+              sf.pqHybridV1.generateMlKemKeypair()
+            const envelopeKey = sf.randomBytes(32)
+            const r = await sf.pqHybridV1.encryptBlob({
+              blob: file,
+              recipientPublicKey: publicKey,
+              envelopeKey,
+              chunkSize: 1024 * 1024,
+              onProgress,
+            })
+            encryptedBlob = r.blob
+            decryptInputs = {
+              kind: 'pq',
+              recipientSecretKey: secretKey,
+              envelopeKey,
+            }
+            encOut.textContent =
+              `suite: pq-hybrid-xchacha-mlkem1024-v1\n` +
+              `chunks: ${r.totalChunks}\n` +
+              `plaintext: ${r.plaintextSize} B\n` +
+              `ciphertext: ${r.blob.size} B\n` +
+              `ml-kem secret key (kept locally): ${secretKey.length} B\n` +
+              `envelope key: ${bytesToB64(envelopeKey)}`
+          }
+
+          encOut.classList.remove('err')
+          encOut.classList.add('ok')
+          encOut.hidden = false
+
+          const url = URL.createObjectURL(encryptedBlob)
+          downloadEnc.href = url
+          downloadEnc.download = file.name + '.sf5'
+          downloadEnc.textContent = 'Download encrypted (.sf5)'
+          downloadEnc.hidden = false
+
+          decryptBtn.disabled = false
+        } catch (err) {
+          encOut.textContent = String(err && err.stack ? err.stack : err)
+          encOut.classList.remove('ok')
+          encOut.classList.add('err')
+          encOut.hidden = false
+        } finally {
+          encryptBtn.disabled = false
+          encProgress.hidden = true
+        }
+      })
+
+      decryptBtn.addEventListener('click', async () => {
+        if (!encryptedBlob || !decryptInputs) return
+        decryptBtn.disabled = true
+        decProgress.hidden = false
+        decProgress.value = 0
+        decOut.hidden = true
+
+        try {
+          const onProgress = (p) => {
+            decProgress.value = p
+          }
+          const plaintext = await sf.autoDecryptBlob({
+            blob: encryptedBlob,
+            ...(decryptInputs.kind === 'classical'
+              ? { contentKey: decryptInputs.contentKey }
+              : {
+                  recipientSecretKey: decryptInputs.recipientSecretKey,
+                  envelopeKey: decryptInputs.envelopeKey,
+                }),
+            onProgress,
+          })
+          const url = URL.createObjectURL(plaintext)
+          const file = fileInput.files[0]
+          downloadDec.href = url
+          downloadDec.download = file?.name ?? 'recovered.bin'
+          downloadDec.textContent = 'Download recovered plaintext'
+          downloadDec.hidden = false
+
+          decOut.textContent =
+            `recovered: ${plaintext.size} B\n` +
+            `expected:  ${file?.size ?? '?'} B\n` +
+            (file && plaintext.size === file.size
+              ? '✓ sizes match'
+              : '✗ size mismatch')
+          decOut.classList.remove('err')
+          decOut.classList.add('ok')
+          decOut.hidden = false
+        } catch (err) {
+          decOut.textContent = String(err && err.stack ? err.stack : err)
+          decOut.classList.remove('ok')
+          decOut.classList.add('err')
+          decOut.hidden = false
+        } finally {
+          decryptBtn.disabled = false
+          decProgress.hidden = true
+        }
+      })
+    </script>
+  </body>
+</html>

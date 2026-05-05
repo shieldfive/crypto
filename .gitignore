@@ -1,0 +1,21 @@
+node_modules/
+dist/
+coverage/
+.tsbuildinfo
+*.tgz
+
+# Editor
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Env / secrets
+.env
+.env.*
+!.env.example
