@@ -104,6 +104,19 @@ export async function buildAuthenticatedHeader(
  *
  * Two-phase parse-then-verify keeps the parser usable for tooling that
  * inspects encrypted files without holding the key.
+ *
+ * parseHeader does not verify the header MAC. For non-KEM suites
+ * (0x01 aes-gcm-v1, 0x02 xchacha-v1), callers MUST call
+ * verifyHeaderMac BEFORE doing anything with parsed.suitePayload,
+ * including length checks, field extraction, or downstream parsing.
+ * KEM suites (0x03 pq-hybrid-v1) cannot follow this rule by
+ * construction; see spec/format-v1.md § "0x03 — pq-hybrid" for the
+ * required ordering and security argument.
+ *
+ * Cross-field consistency (totalChunks / chunkSize / plaintextSize) is
+ * enforced here via `assertHeaderConsistency`. The same helper runs in
+ * `validateHeaderInputs` so encode and decode share one source of
+ * truth; both paths MUST stay in sync.
  */
 export function parseHeader(input: Uint8Array): ParsedHeader & {
   unauthenticatedBytes: Uint8Array
@@ -152,17 +165,7 @@ export function parseHeader(input: Uint8Array): ParsedHeader & {
   const plaintextSize = readUint64BE(input, offset)
   offset += HEADER_SIZES.PLAINTEXT_SIZE
 
-  // Cross-field consistency: total_chunks must match plaintextSize / chunkSize
-  if (totalChunks === 0 && plaintextSize !== 0) {
-    throw new HeaderError('total_chunks_zero_with_plaintext')
-  }
-  if (totalChunks > 0) {
-    const minPlaintext = (totalChunks - 1) * chunkSize + 1
-    const maxPlaintext = totalChunks * chunkSize
-    if (plaintextSize < minPlaintext || plaintextSize > maxPlaintext) {
-      throw new HeaderError('plaintext_size_inconsistent')
-    }
-  }
+  assertHeaderConsistency({ chunkSize, totalChunks, plaintextSize })
 
   const suitePayloadLen = readUint16BE(input, offset)
   offset += HEADER_SIZES.SUITE_PAYLOAD_LEN
@@ -270,6 +273,35 @@ function validateHeaderInputs(input: HeaderInputs): void {
   }
   if (input.suitePayload.length > 0xffff) {
     throw new HeaderError('suite_payload_too_large')
+  }
+  assertHeaderConsistency({
+    chunkSize: input.chunkSize,
+    totalChunks: input.totalChunks,
+    plaintextSize: input.plaintextSize,
+  })
+}
+
+/**
+ * Assert the cross-field invariant tying total_chunks, chunk_size, and
+ * plaintext_size together. Shared by `parseHeader` (decode path) and
+ * `validateHeaderInputs` (encode path) so both layers reject the same
+ * malformed combinations with the same error codes.
+ */
+function assertHeaderConsistency(fields: {
+  chunkSize: number
+  totalChunks: number
+  plaintextSize: number
+}): void {
+  const { chunkSize, totalChunks, plaintextSize } = fields
+  if (totalChunks === 0 && plaintextSize !== 0) {
+    throw new HeaderError('total_chunks_zero_with_plaintext')
+  }
+  if (totalChunks > 0) {
+    const minPlaintext = (totalChunks - 1) * chunkSize + 1
+    const maxPlaintext = totalChunks * chunkSize
+    if (plaintextSize < minPlaintext || plaintextSize > maxPlaintext) {
+      throw new HeaderError('plaintext_size_inconsistent')
+    }
   }
 }
 

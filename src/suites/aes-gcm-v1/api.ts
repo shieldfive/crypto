@@ -205,11 +205,13 @@ export async function decryptBlob(options: DecryptOptions): Promise<Blob> {
     )
   }
 
+  // MUST verify the header MAC before reading or interpreting any
+  // suite_payload bytes — see parseHeader docstring and
+  // spec/format-v1.md § "verification order".
+  await verifyHeaderMac(parsed, contentKey)
+
   // Validate the suite payload structure (length etc).
   parseAesGcmV1SuitePayload(parsed.suitePayload)
-
-  // Verify header MAC before processing chunks.
-  await verifyHeaderMac(parsed, contentKey)
 
   const ctx = await createChunkContext(
     contentKey,
