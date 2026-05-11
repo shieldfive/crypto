@@ -32,6 +32,7 @@ import { HKDF_INFO, SUITE } from '../../src/internal/types.js'
 
 import * as aes from '../../src/suites/aes-gcm-v1/api.js'
 import * as xchacha from '../../src/suites/xchacha-v1/api.js'
+import { deriveMlKemKeypair } from '../../src/suites/pq-hybrid-v1/index.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const VECTORS = JSON.parse(
@@ -258,4 +259,35 @@ test('vectors: nonce-prefix absent-salt convention is zeros(32)', async () => {
     ),
     v.derived['xchacha20-poly1305-v1.nonce_prefix'].hex,
   )
+})
+
+test('vectors: ML-KEM-1024 keypair derivation (seed split convention)', async () => {
+  const v = VECTORS.vectors['10_ml_kem_keypair_derivation']
+  const masterSecret = hexToBytes(v.inputs.master_secret.hex)
+
+  // Step 1: re-derive the 64-byte seed and confirm bit-stability.
+  const mlKemSeed = await hkdfSha256({
+    ikm: masterSecret,
+    info: HKDF_INFO.ML_KEM_1024_SEED,
+    length: 64,
+  })
+  assert.equal(bytesToHex(mlKemSeed), v.derived.ml_kem_seed.hex)
+
+  // Step 2: confirm the documented d/z split halves match the seed.
+  assert.equal(
+    bytesToHex(mlKemSeed.subarray(0, 32)),
+    v.derived['ml_kem_seed.d_first_32'].hex,
+  )
+  assert.equal(
+    bytesToHex(mlKemSeed.subarray(32, 64)),
+    v.derived['ml_kem_seed.z_last_32'].hex,
+  )
+
+  // Step 3: derive the keypair and confirm pk / sk match the pinned bytes.
+  // A reimplementation that splits the seed differently than
+  // d=seed[0..32], z=seed[32..64] will produce different pk/sk and fail
+  // here.
+  const { publicKey, secretKey } = await deriveMlKemKeypair(masterSecret)
+  assert.equal(bytesToHex(publicKey), v.derived.ml_kem_public_key.hex)
+  assert.equal(bytesToHex(secretKey), v.derived.ml_kem_secret_key.hex)
 })

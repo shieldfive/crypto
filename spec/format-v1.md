@@ -91,9 +91,14 @@ header_mac_key := HKDF-SHA-256(
 )
 ```
 
-Readers MUST verify `header_mac` before parsing `suite_payload` or any
-chunk. A header_mac failure means the wrong content key was supplied or the
-header has been tampered with.
+For suites whose header MAC key is not derived from `suite_payload`
+(currently `0x01` aes-gcm-v1, `0x02` xchacha-v1), readers MUST verify
+`header_mac` before parsing `suite_payload` or any chunk. KEM suites
+(currently `0x03` pq-hybrid-v1) verify `header_mac` after decapsulation
+per their suite-specific decryption flow; see § "`0x03` — pq-hybrid"
+below for the required ordering and security argument. A header_mac
+failure means the wrong content key was supplied or the header has been
+tampered with.
 
 ### Chunks
 
@@ -237,6 +242,49 @@ Decryption:
 3. Reader recomputes `K = HKDF-SHA-256(ikm = S_c || S_pq, ...)`.
 4. Reader verifies `header_mac` (which uses `K`).
 5. Reader processes chunks.
+
+#### Security argument for pre-MAC decapsulation
+
+The decapsulation in step 1 operates on unauthenticated
+`mlkem_ciphertext` bytes — the header MAC cannot yet be verified at
+that point, because the MAC key is the combined key K, which requires
+both decapsulation and classical unwrap to compute. Safety of this
+construction rests on three properties:
+
+1. **ML-KEM-1024 is IND-CCA2-secure** (FIPS 203). Decapsulation of
+   malformed or adversarial ciphertext does not leak the encapsulated
+   secret `S_pq` and does not leak the secret key `sk_pq`. An attacker
+   who modifies `mlkem_ciphertext` bytes obtains a different `S_pq`
+   (computationally indistinguishable from random under IND-CCA2), but
+   learns nothing about the underlying key material.
+
+2. **The classical share is wrapped with XSalsa20-Poly1305 secretbox.**
+   The unwrap in step 2 is an AEAD operation over attacker-influenced
+   `classical_wrapped` bytes. Any modification of those bytes causes
+   the secretbox tag check to fail, raising before plaintext is
+   produced. An attacker who modifies the classical share cannot
+   silently substitute a different `S_c`.
+
+3. **The recombined key K is verified via `header_mac`.** The
+   encryptor's `header_mac` is a valid HMAC-SHA-256 tag under the
+   encryptor's K over the encryptor's header bytes. An attacker who
+   modifies any bytes covered by the MAC (header fields,
+   `suite_payload`, or both) and whose modified inputs cause
+   decapsulation and classical unwrap to yield some K' would then
+   need to forge an HMAC-SHA-256 tag under K' over the modified
+   bytes — which contradicts HMAC's EUF-CMA security. Equivalently:
+   the only way to pass MAC verification under any K' is to leave
+   the MAC-covered bytes unchanged, in which case the encryption
+   succeeds against the unmodified ciphertext (not an attack).
+
+An attacker modifying `suite_payload` bytes therefore either (a) gets a
+different combined key K and fails `header_mac` verification, or (b)
+fails at secretbox tag check during classical unwrap, or (c) learns
+nothing under ML-KEM IND-CCA2. In no case is plaintext revealed.
+Implementations MAY surface a distinct error for case (b) (secretbox
+failure) versus case (a) (MAC failure) since case (b) is reachable with
+smaller attacker effort and may be useful for telemetry; they MUST NOT
+leak the value of K, S_c, or S_pq in any error path.
 
 This construction is IND-CCA2 against an adversary who breaks *either* the
 classical wrap *or* the PQ KEM, but not both. As long as one primitive

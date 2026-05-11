@@ -44,6 +44,17 @@ master_secret
     └── (ml_kem_pk, ml_kem_sk) = ML-KEM-1024.KeyGen(ml_kem_seed)
 ```
 
+The 64-byte `ml_kem_seed` is split into `d = ml_kem_seed[0..32]` and
+`z = ml_kem_seed[32..64]`, with `d` consumed as ML-KEM-1024.KeyGen's
+random-coins input (FIPS 203 § Algorithm 16, parameter `d`) and `z`
+stored as the implicit-rejection seed (FIPS 203 § Algorithm 17,
+parameter `z`). Implementers using a library whose API exposes a
+combined-seed form `KeyGen(seed)` (e.g., @noble/post-quantum) typically
+follow this same convention, but MUST verify against the deterministic
+test vectors below. Implementers using a library that exposes
+`KeyGen(d, z)` separately MUST split the seed exactly as specified
+here.
+
 The function `deriveMlKemKeypair(masterSecret)` exported from
 `@shieldfive/crypto/pq-hybrid-v1` performs the seed derivation and the
 ML-KEM keygen step in one call.
