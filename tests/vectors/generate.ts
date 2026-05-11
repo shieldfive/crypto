@@ -33,6 +33,7 @@ import { HEADER_SIZES, HKDF_INFO, SUITE } from '../../src/internal/types.js'
 
 import * as aes from '../../src/suites/aes-gcm-v1/api.js'
 import * as xchacha from '../../src/suites/xchacha-v1/api.js'
+import { deriveMlKemKeypair } from '../../src/suites/pq-hybrid-v1/index.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -489,6 +490,53 @@ async function noncePrefixAbsentSaltVectors() {
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// Vector 10 — ML-KEM-1024 keypair derivation (seed split convention)
+// ──────────────────────────────────────────────────────────────────────
+//
+// Pins the deterministic ML-KEM-1024 keypair derived from a master
+// secret of zeros(32). The 64-byte HKDF output is split into
+// d = seed[0..32] and z = seed[32..64] per FIPS 203 (Algorithms 16
+// and 17). Third-party implementations using a library whose KeyGen
+// API exposes (d, z) separately MUST split the seed exactly this way;
+// implementations using a combined-seed KeyGen(seed) (e.g.,
+// @noble/post-quantum) can verify by reproducing the full pk and sk
+// outputs.
+//
+// Internal-review finding 2.4.
+
+async function mlKemKeypairDerivationVectors() {
+  const masterSecret = fixedBytes(0x00, 32)
+
+  const mlKemSeed = await hkdfSha256({
+    ikm: masterSecret,
+    info: HKDF_INFO.ML_KEM_1024_SEED,
+    length: 64,
+  })
+
+  const { publicKey, secretKey } = await deriveMlKemKeypair(masterSecret)
+
+  return {
+    description:
+      'Deterministic ML-KEM-1024 keypair derivation from master_secret = zeros(32). ' +
+      'Pins the 64-byte HKDF seed output and the full pk (1568 bytes) and sk ' +
+      '(3168 bytes) produced by ML-KEM-1024.KeyGen(d=seed[0..32], z=seed[32..64]). ' +
+      'See spec/key-derivation.md § "Derivation tree" and internal-review finding 2.4.',
+    inputs: {
+      master_secret: vec(masterSecret),
+      hkdf_info: HKDF_INFO.ML_KEM_1024_SEED,
+      seed_length: 64,
+    },
+    derived: {
+      ml_kem_seed: vec(mlKemSeed),
+      'ml_kem_seed.d_first_32': vec(mlKemSeed.subarray(0, 32)),
+      'ml_kem_seed.z_last_32': vec(mlKemSeed.subarray(32, 64)),
+      ml_kem_public_key: vec(publicKey),
+      ml_kem_secret_key: vec(secretKey),
+    },
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // Driver
 // ──────────────────────────────────────────────────────────────────────
 
@@ -508,6 +556,7 @@ async function main() {
       '07_hmac_sha256_rfc4231': await hmacVector(),
       '08_aad_binding': await aadBindingVectors(),
       '09_nonce_prefix_absent_salt': await noncePrefixAbsentSaltVectors(),
+      '10_ml_kem_keypair_derivation': await mlKemKeypairDerivationVectors(),
     },
   }
 
