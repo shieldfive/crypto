@@ -275,6 +275,74 @@
         "expected_hex": "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7",
         "computed_hex": "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
       }
+    },
+    "08_aad_binding": {
+      "description": "AES-GCM-v1 full-file ciphertext with fixed all-zero content_key and file_id. Pins that file_id is NOT mixed into the AAD bytes. Cross-file splice resistance is provided structurally via HKDF salts in chunk-key and nonce-prefix derivation. Adding file_id to AAD construction would change the AEAD tags and fail these vectors. See spec/format-v1.md and internal-review finding 1.1.",
+      "inputs": {
+        "suite": "0x01 (aes-256-gcm-v1)",
+        "content_key": {
+          "hex": "0000000000000000000000000000000000000000000000000000000000000000",
+          "base64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+          "length": 32
+        },
+        "file_id": {
+          "hex": "00000000000000000000000000000000",
+          "base64": "AAAAAAAAAAAAAAAAAAAAAA==",
+          "length": 16
+        },
+        "chunk_size": 32
+      },
+      "one_chunk": {
+        "plaintext": {
+          "hex": "0000000000000000000000000000000000000000000000000000000000000000",
+          "base64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+          "length": 32
+        },
+        "total_chunks": 1,
+        "plaintext_size": 32,
+        "encrypted_blob": {
+          "hex": "53463501000100000000000000000000000000000000000000002000000000000000010000000000000020004800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000020bd0fe5f171692936615bb1162881b4170f69d993af5c052891c001f6c0915200000030632e46bf0e9250304349b752dedbf2d13588bb1c81607a79b2282351333e476ad49b78bbb44aca90a4334b4e6a4de40f",
+          "base64": "U0Y1AQABAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAEAAAAAAAAAIABIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIL0P5fFxaSk2YVuxFiiBtBcPadmTr1wFKJHAAfbAkVIAAAAwYy5Gvw6SUDBDSbdS3tvy0TWIuxyBYHp5sigjUTM+R2rUm3i7tErKkKQzS05qTeQP",
+          "length": 201
+        }
+      },
+      "two_chunk": {
+        "plaintext": {
+          "hex": "000000000000000000000000000000000000000000000000000000000000000000",
+          "base64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "length": 33
+        },
+        "total_chunks": 2,
+        "plaintext_size": 33,
+        "encrypted_blob": {
+          "hex": "534635010001000000000000000000000000000000000000000020000000000000000200000000000000210048000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000851358075677e4c740a54586d1c9eb1ee9fabe5474774246c1155c91b9c664f200000030632e46bf0e9250304349b752dedbf2d13588bb1c81607a79b2282351333e476acbbae1cee483f3aa51a59022e4e731d10000001192c2cccc4f58a0567cba5f73134f21f407",
+          "base64": "U0Y1AQABAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAIAAAAAAAAAIQBIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAhRNYB1Z35MdApUWG0cnrHun6vlR0d0JGwRVckbnGZPIAAAAwYy5Gvw6SUDBDSbdS3tvy0TWIuxyBYHp5sigjUTM+R2rLuuHO5IPzqlGlkCLk5zHRAAAAEZLCzMxPWKBWfLpfcxNPIfQH",
+          "length": 222
+        }
+      }
+    },
+    "09_nonce_prefix_absent_salt": {
+      "description": "Nonce-prefix HKDF outputs with file_id = zeros(16). Salt is the RFC 5869 absent-salt zero-fill (zeros(32) for SHA-256). For HMAC-SHA-256, salt=Uint8Array(0) and salt=zeros(32) are computationally equivalent; the vector documents the canonical convention rather than catching that distinction. See internal-review findings 1.2 + 2.8.",
+      "inputs": {
+        "file_id": {
+          "hex": "00000000000000000000000000000000",
+          "base64": "AAAAAAAAAAAAAAAAAAAAAA==",
+          "length": 16
+        },
+        "salt_convention": "absent (HKDF default → zeros(32) per RFC 5869)"
+      },
+      "derived": {
+        "aes-256-gcm-v1.nonce_prefix": {
+          "hex": "2c2ce5bd",
+          "base64": "LCzlvQ==",
+          "length": 4
+        },
+        "xchacha20-poly1305-v1.nonce_prefix": {
+          "hex": "ada1b97f811a4b04ea2465ba8a41de39",
+          "base64": "raG5f4EaSwTqJGW6ikHeOQ==",
+          "length": 16
+        }
+      }
     }
   }
 }

@@ -119,7 +119,7 @@ export async function deriveMlKemKeypair(
 ): Promise<{ publicKey: Uint8Array; secretKey: Uint8Array }> {
   const seed = await hkdfSha256({
     ikm: masterSecret,
-    info: 'shieldfive/v1/pq-hybrid/ml-kem-1024-seed',
+    info: HKDF_INFO.ML_KEM_1024_SEED,
     length: 64,
   })
   return ml_kem1024.keygen(seed)

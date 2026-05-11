@@ -22,8 +22,16 @@ Everything below is a deterministic function of this secret.
 ## Derivation tree
 
 All derivations are HKDF-SHA-256. The `info` string is a printable
-domain separator. Salt is empty unless otherwise stated. Keys are 32 bytes
-unless otherwise stated.
+domain separator. When the salt is omitted in the definitions below,
+its canonical form is `zeros(32)` per RFC 5869's "absent salt"
+convention (a string of `HashLen` zero octets, where `HashLen = 32` for
+SHA-256). Implementations MUST use this form; under HMAC-SHA-256 a
+zero-length salt yields the same HKDF-Extract output because HMAC
+zero-pads short keys to its 64-byte block size, but the canonical form
+is required so that cross-implementation test vectors pin a single
+shape. Keys are 32 bytes unless otherwise stated. Test vectors for the
+nonce-prefix absent-salt derivation are at `tests/vectors/vectors.json`
+(group `09_nonce_prefix_absent_salt`).
 
 ```
 master_secret
@@ -79,11 +87,20 @@ iv / nonce_i     = nonce_prefix || uint64_be(chunk_index)
 
 For the PQ-hybrid suite, `content_key` is replaced by the combined key
 `K = HKDF(classical_share || pq_share, salt=file_id,
-info="shieldfive/v1/pq-hybrid/combine")`.
+info="shieldfive/v1/pq-hybrid/combine", L=32)`. The chunk-key and
+nonce-prefix derivations are then identical to the XChaCha suite's,
+with `K` in the role of `content_key` and the same info strings
+(`shieldfive/v1/xchacha/chunk-key` and
+`shieldfive/v1/xchacha/nonce-prefix`). Reuse of those info strings
+across the two suites is safe because the IKM space is partitioned:
+XChaCha uses a fresh random `content_key` per file, PQ-hybrid uses the
+file-bound HKDF output `K`. Both are 32 bytes of uniformly random or
+pseudorandom material per file; cross-suite output collision
+probability is `2^-256`.
 
 ## Forbidden cross-context usage
 
-These domain strings are consumed *only* by the crypto layer. The host
+These domain strings are consumed by the crypto layer. The host
 application MUST NOT reuse any of them for unrelated purposes:
 
 ```
@@ -94,9 +111,26 @@ shieldfive/v1/xchacha/chunk-key
 shieldfive/v1/xchacha/nonce-prefix
 shieldfive/v1/pq-hybrid/combine
 shieldfive/v1/pq-hybrid/ml-kem-1024-seed
+shieldfive/v1/argon2id/salt-compression
+```
+
+### Reserved for future use
+
+These strings are reserved by this specification but are NOT yet
+consumed by the reference implementation. They MUST NOT be reused by
+host applications for unrelated purposes, since a future minor
+revision of this spec may begin consuming them:
+
+```
 shieldfive/v1/envelope-key
 shieldfive/v1/metadata-key
 ```
+
+Interpretation note: the forbidden-list framing above scopes to
+strings the library actually consumes today. The two entries here are
+spec-only reservations carried over from the derivation tree, kept
+separate so the forbidden list can be cross-checked against
+`HKDF_INFO` in `src/internal/types.ts` without phantom entries.
 
 If the host application needs a new derived key, it MUST use a fresh
 domain string of the form `<application>/<version>/<purpose>` to ensure

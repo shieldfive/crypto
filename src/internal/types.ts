@@ -83,6 +83,8 @@ export const HKDF_INFO = Object.freeze({
   XCHACHA_CHUNK_KEY: 'shieldfive/v1/xchacha/chunk-key',
   XCHACHA_NONCE_PREFIX: 'shieldfive/v1/xchacha/nonce-prefix',
   PQ_HYBRID_COMBINE: 'shieldfive/v1/pq-hybrid/combine',
+  ML_KEM_1024_SEED: 'shieldfive/v1/pq-hybrid/ml-kem-1024-seed',
+  ARGON2ID_SALT_COMPRESSION: 'shieldfive/v1/argon2id/salt-compression',
 })
 
 /** AAD domain string mixed into every chunk's authenticator */
