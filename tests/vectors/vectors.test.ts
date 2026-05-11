@@ -202,3 +202,60 @@ test('vectors: HMAC-SHA-256 RFC 4231 case 1', async () => {
   )
   assert.equal(bytesToHex(computed), v.expected_hex)
 })
+
+test('vectors: AAD binding — file_id is NOT in AAD (aes-gcm-v1)', async () => {
+  const v = VECTORS.vectors['08_aad_binding']
+  const contentKey = hexToBytes(v.inputs.content_key.hex)
+  const fileId = hexToBytes(v.inputs.file_id.hex)
+
+  const oneChunkPlaintext = hexToBytes(v.one_chunk.plaintext.hex)
+  const oneChunk = await aes.encryptBlob({
+    blob: new Blob([oneChunkPlaintext as Uint8Array<ArrayBuffer>]),
+    contentKey,
+    fileId,
+    chunkSize: v.inputs.chunk_size,
+  })
+  assert.equal(
+    bytesToHex(new Uint8Array(await oneChunk.blob.arrayBuffer())),
+    v.one_chunk.encrypted_blob.hex,
+  )
+
+  const twoChunkPlaintext = hexToBytes(v.two_chunk.plaintext.hex)
+  const twoChunk = await aes.encryptBlob({
+    blob: new Blob([twoChunkPlaintext as Uint8Array<ArrayBuffer>]),
+    contentKey,
+    fileId,
+    chunkSize: v.inputs.chunk_size,
+  })
+  assert.equal(
+    bytesToHex(new Uint8Array(await twoChunk.blob.arrayBuffer())),
+    v.two_chunk.encrypted_blob.hex,
+  )
+})
+
+test('vectors: nonce-prefix absent-salt convention is zeros(32)', async () => {
+  const v = VECTORS.vectors['09_nonce_prefix_absent_salt']
+  const fileId = hexToBytes(v.inputs.file_id.hex)
+
+  assert.equal(
+    bytesToHex(
+      await hkdfSha256({
+        ikm: fileId,
+        info: HKDF_INFO.AES_GCM_NONCE_PREFIX,
+        length: 4,
+      }),
+    ),
+    v.derived['aes-256-gcm-v1.nonce_prefix'].hex,
+  )
+
+  assert.equal(
+    bytesToHex(
+      await hkdfSha256({
+        ikm: fileId,
+        info: HKDF_INFO.XCHACHA_NONCE_PREFIX,
+        length: 16,
+      }),
+    ),
+    v.derived['xchacha20-poly1305-v1.nonce_prefix'].hex,
+  )
+})

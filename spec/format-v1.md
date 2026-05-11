@@ -66,9 +66,12 @@ byte. Future versions may introduce flags such as
 `0x01 = compressed-plaintext` or `0x02 = sparse-file-encoding`.
 
 `file_id` is 16 cryptographically random bytes generated per file. It is
-mixed into every chunk's AAD to bind ciphertext to its file. This prevents
-chunk-mixing attacks where chunks from one file are spliced into another
-file with the same content key.
+mixed into every chunk's key and nonce derivation (see the per-suite
+definitions below) to bind ciphertext to its file. `file_id` is NOT
+present in the AAD itself; the cross-file splice resistance is
+structural, via the suite-specific HKDF salt. Future implementers MUST
+NOT add `file_id` to the AAD bytes — doing so would break wire
+compatibility with already-shipped v1 files.
 
 `plaintext_size` is the exact number of plaintext bytes. It allows a reader
 to detect truncation of the final chunk before AEAD verification, and to
@@ -114,6 +117,11 @@ where:
 - `chunk_nonce` and `chunk_key` are defined per suite.
 - `aad` is a fixed-length 36 bytes (19 bytes domain string + 8 + 8 + 1).
 
+Note: the AAD is exactly the 36 bytes defined above. Do not extend it.
+Cross-file splice resistance is provided by the suite-specific
+chunk-key and nonce-prefix derivations, which use `file_id` as HKDF
+salt and IKM respectively.
+
 The plaintext input is:
 
 - For all chunks except the final: exactly `chunk_size` plaintext bytes.
@@ -144,8 +152,13 @@ suite_payload := wrapped_key   (60 bytes) = AES-GCM-wrapped 32-byte content key
 - `chunk_key(content_key, file_id)` =
   `HKDF-SHA-256(ikm=content_key, salt=file_id, info="shieldfive/v1/aes-gcm/chunk-key", L=32)`
 - `chunk_nonce(file_id, i)` =
-  `truncate12(HKDF-SHA-256(ikm=file_id, salt="", info="shieldfive/v1/aes-gcm/nonce-prefix", L=12))[0..3]`
+  `HKDF-SHA-256(ikm=file_id, salt=zeros(32), info="shieldfive/v1/aes-gcm/nonce-prefix", L=4)`
   `|| uint64_be(i)`
+
+  The salt is the RFC 5869 "absent salt" convention: a 32-byte all-zero
+  string (the SHA-256 output length). Implementations MUST use this
+  canonical form, even though HMAC-SHA-256 happens to produce an
+  identical HKDF-Extract output for any salt that zero-pads to 64 bytes.
 
 The nonce prefix is derived from `file_id` so that two files encrypted with
 the same content key (which never happens under correct use, but defense in
@@ -154,11 +167,14 @@ depth) cannot collide on a `(prefix, counter)` pair.
 The wrapped content key is wrapped with the *parent envelope key* (folder
 key, vault key, etc.) using AES-256-GCM. This wrapping is OUT OF SCOPE for
 the on-disk file format and is the responsibility of the application's
-keyring module. The 60-byte field above is for files that choose to embed
-the wrapped key inline (e.g. exported files); files stored in the
-ShieldFive vault store the wrapped key in the database and set this field
-to 60 bytes of zero. Whether the field is inline or zero-filled is a deploy
-decision; either way the field length is fixed.
+keyring module. The fields above are for files that choose to embed the
+wrapped key inline (e.g. exported files). When the wrapped key is stored
+out-of-band (e.g. in the ShieldFive vault database), all 72 bytes of
+`suite_payload` (60-byte `wrapped_key` + 12-byte `wrap_iv`) are set to
+zero. Readers MUST accept all-zero `suite_payload` bytes in this case
+and obtain the wrapped key from the out-of-band channel. Whether the
+field is inline or zero-filled is a deploy decision; either way the
+field length is fixed at 72 bytes.
 
 ### `0x02` — `xchacha20-poly1305-v1`
 
@@ -170,11 +186,21 @@ suite_payload := wrapped_key   (72 bytes) = secretbox-wrapped 32-byte content ke
 - `chunk_key(content_key, file_id)` =
   `HKDF-SHA-256(ikm=content_key, salt=file_id, info="shieldfive/v1/xchacha/chunk-key", L=32)`
 - `chunk_nonce(file_id, i)` =
-  `truncate24(HKDF-SHA-256(ikm=file_id, salt="", info="shieldfive/v1/xchacha/nonce-prefix", L=24))[0..15]`
+  `HKDF-SHA-256(ikm=file_id, salt=zeros(32), info="shieldfive/v1/xchacha/nonce-prefix", L=16)`
   `|| uint64_be(i)`
+
+  Salt convention is the RFC 5869 absent-salt zero-fill (32 zero bytes),
+  identical to the AES-GCM suite above.
 
 XChaCha20's 24-byte nonce gives us a 16-byte random prefix and an 8-byte
 counter, which is structurally safer than AES-GCM's 4+8 split.
+
+As with the AES-GCM suite, when the wrapped key is stored out-of-band
+(e.g. in the ShieldFive vault database), all 96 bytes of `suite_payload`
+(72-byte `wrapped_key` + 24-byte `wrap_nonce`) are set to zero. Readers
+MUST accept all-zero `suite_payload` bytes in this case and obtain the
+wrapped key from the out-of-band channel. The field length is fixed at
+96 bytes whether inline or zero-filled.
 
 ### `0x03` — `pq-hybrid-xchacha-mlkem1024-v1` (default)
 
@@ -217,6 +243,13 @@ classical wrap *or* the PQ KEM, but not both. As long as one primitive
 remains secure, the file is secure. Under correct use, both must be broken
 to recover the plaintext.
 
+Unlike the AES-GCM and XChaCha suites, the all-zero `suite_payload`
+convention does NOT apply to PQ-hybrid: `mlkem_ciphertext` is part of
+decryption (the PQ shared secret is recovered from it via
+decapsulation) and therefore cannot be stored out-of-band. The full
+1664-byte `suite_payload` MUST be present inline in every PQ-hybrid
+file.
+
 ## Versioning policy
 
 - **Format major version (4th byte of magic)** changes when the parser
@@ -237,6 +270,14 @@ specification. It is referred to as "v0" and is described in
 by the absence of magic and by the presence of the database-stored
 `cipher_version = 1` flag. ShieldFive applications MUST be able to read
 v0 indefinitely; v0 writes are deprecated and SHOULD be migrated to v1.
+
+v0 and v1 cannot be silently confused in either direction. A v1 blob fed
+to the v0 reader fails AES-GCM authentication on chunk 0 (the v1
+magic/suite/file_id bytes do not form a valid GCM tag). A v0 blob fed to
+`parseHeader` fails the magic-byte check with probability `1 - 2^-40`
+per file. Application dispatchers MUST route by an explicit version
+field (e.g. a database column) and MUST NOT auto-detect across formats.
+The library does not expose cross-format auto-detection.
 
 ## Test vectors
 

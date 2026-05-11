@@ -374,6 +374,121 @@ async function hmacVector() {
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// Vector 8 — AAD binding (file_id is NOT in AAD)
+// ──────────────────────────────────────────────────────────────────────
+//
+// Pins the AES-GCM-v1 ciphertext bytes for fixed all-zero key/file_id at
+// chunk_index=0 (total_chunks=1) and chunk_index=1 (total_chunks=2). If
+// any future change adds file_id to the AAD construction, the AEAD tag
+// bytes will diverge and these vectors will fail.
+//
+// Internal-review finding 1.1: spec prose previously claimed file_id was
+// in the AAD; the structural binding is via per-suite HKDF salts.
+
+async function aadBindingVectors() {
+  const contentKey = fixedBytes(0x00, 32)
+  const fileId = fixedBytes(0x00, 16)
+
+  // Single-chunk file: 32 bytes of 0x00 → chunk_index=0, total_chunks=1, is_final=true
+  const oneChunkPlaintext = fixedBytes(0x00, 32)
+  const oneChunk = await aes.encryptBlob({
+    blob: new Blob([oneChunkPlaintext as Uint8Array<ArrayBuffer>]),
+    contentKey,
+    fileId,
+    chunkSize: 32,
+  })
+  const oneChunkCt = await blobToBytes(oneChunk.blob)
+
+  // Two-chunk file: 33 bytes → first chunk is full (32 bytes), final chunk is 1 byte
+  const twoChunkPlaintext = fixedBytes(0x00, 33)
+  const twoChunk = await aes.encryptBlob({
+    blob: new Blob([twoChunkPlaintext as Uint8Array<ArrayBuffer>]),
+    contentKey,
+    fileId,
+    chunkSize: 32,
+  })
+  const twoChunkCt = await blobToBytes(twoChunk.blob)
+
+  return {
+    description:
+      'AES-GCM-v1 full-file ciphertext with fixed all-zero content_key and file_id. ' +
+      'Pins that file_id is NOT mixed into the AAD bytes. Cross-file splice resistance is ' +
+      'provided structurally via HKDF salts in chunk-key and nonce-prefix derivation. ' +
+      'Adding file_id to AAD construction would change the AEAD tags and fail these vectors. ' +
+      'See spec/format-v1.md and internal-review finding 1.1.',
+    inputs: {
+      suite: '0x01 (aes-256-gcm-v1)',
+      content_key: vec(contentKey),
+      file_id: vec(fileId),
+      chunk_size: 32,
+    },
+    one_chunk: {
+      plaintext: vec(oneChunkPlaintext),
+      total_chunks: oneChunk.totalChunks,
+      plaintext_size: oneChunk.plaintextSize,
+      encrypted_blob: vec(oneChunkCt),
+    },
+    two_chunk: {
+      plaintext: vec(twoChunkPlaintext),
+      total_chunks: twoChunk.totalChunks,
+      plaintext_size: twoChunk.plaintextSize,
+      encrypted_blob: vec(twoChunkCt),
+    },
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Vector 9 — nonce-prefix absent-salt convention (RFC 5869 zeros(32))
+// ──────────────────────────────────────────────────────────────────────
+//
+// Pins the AES-GCM-v1 (4-byte) and XChaCha-v1 (16-byte) nonce prefixes
+// for file_id = zeros(16). The HKDF salt is the RFC 5869 absent-salt
+// zero-fill: zeros(32). This documents the convention the spec now
+// states explicitly.
+//
+// Note for implementers: under HMAC-SHA-256, salt = Uint8Array(0) and
+// salt = zeros(32) produce identical HKDF-Extract outputs, because HMAC
+// zero-pads keys shorter than its 64-byte block size. The vectors
+// therefore cannot computationally distinguish the two cases; they can,
+// however, catch grosser errors such as using salt = file_id or
+// omitting HKDF-Extract entirely.
+//
+// Internal-review findings 1.2 + 2.8.
+
+async function noncePrefixAbsentSaltVectors() {
+  const fileId = fixedBytes(0x00, 16)
+
+  const aesNoncePrefix = await hkdfSha256({
+    ikm: fileId,
+    info: HKDF_INFO.AES_GCM_NONCE_PREFIX,
+    length: 4,
+  })
+
+  const xchachaNoncePrefix = await hkdfSha256({
+    ikm: fileId,
+    info: HKDF_INFO.XCHACHA_NONCE_PREFIX,
+    length: 16,
+  })
+
+  return {
+    description:
+      'Nonce-prefix HKDF outputs with file_id = zeros(16). Salt is the RFC 5869 ' +
+      'absent-salt zero-fill (zeros(32) for SHA-256). For HMAC-SHA-256, ' +
+      'salt=Uint8Array(0) and salt=zeros(32) are computationally equivalent; the ' +
+      'vector documents the canonical convention rather than catching that ' +
+      'distinction. See internal-review findings 1.2 + 2.8.',
+    inputs: {
+      file_id: vec(fileId),
+      salt_convention: 'absent (HKDF default → zeros(32) per RFC 5869)',
+    },
+    derived: {
+      'aes-256-gcm-v1.nonce_prefix': vec(aesNoncePrefix),
+      'xchacha20-poly1305-v1.nonce_prefix': vec(xchachaNoncePrefix),
+    },
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // Driver
 // ──────────────────────────────────────────────────────────────────────
 
@@ -391,6 +506,8 @@ async function main() {
       '05_aes_gcm_v1_file': await aesGcmFileVector(),
       '06_xchacha_v1_file': await xchachaFileVector(),
       '07_hmac_sha256_rfc4231': await hmacVector(),
+      '08_aad_binding': await aadBindingVectors(),
+      '09_nonce_prefix_absent_salt': await noncePrefixAbsentSaltVectors(),
     },
   }
 

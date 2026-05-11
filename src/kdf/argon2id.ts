@@ -13,6 +13,7 @@
 import { getSodium } from '../internal/sodium.js'
 import { hkdfSha256 } from '../internal/hkdf.js'
 import { randomBytes } from '../internal/runtime.js'
+import { HKDF_INFO } from '../internal/types.js'
 
 /**
  * Argon2id parameter presets.
@@ -103,7 +104,7 @@ export async function deriveMasterSecret(
   if (salt.length > ARGON2ID_SALT_BYTES) {
     usableSalt = await hkdfSha256({
       ikm: salt,
-      info: 'shieldfive/v1/argon2id/salt-compression',
+      info: HKDF_INFO.ARGON2ID_SALT_COMPRESSION,
       length: ARGON2ID_SALT_BYTES,
     })
   }
