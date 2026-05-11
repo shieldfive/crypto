@@ -174,8 +174,11 @@ export async function decryptBlob(
     )
   }
 
-  parseXChaChaV1SuitePayload(parsed.suitePayload)
+  // MUST verify the header MAC before reading or interpreting any
+  // suite_payload bytes — see parseHeader docstring and
+  // spec/format-v1.md § "verification order".
   await verifyHeaderMac(parsed, contentKey)
+  parseXChaChaV1SuitePayload(parsed.suitePayload)
 
   const ctx = await createChunkContext(
     contentKey,
