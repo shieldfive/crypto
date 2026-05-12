@@ -31,6 +31,13 @@ A1 cannot recover:
 Sits between the client and the server. Can drop, reorder, replay, or
 modify any byte. Cannot break TLS.
 
+TLS is terminated at the edge platform (Vercel/Cloudflare) and a fresh
+TLS session is used to talk to Supabase and B2. The AEAD layer is
+end-to-end client-to-blob, so an attacker controlling the TLS
+termination is effectively A1 (sees ciphertext, not plaintext). A2's
+"cannot break TLS" is therefore a statement about the client↔edge leg
+specifically.
+
 A2 cannot:
 
 - Recover plaintext (TLS + AEAD).
@@ -38,7 +45,27 @@ A2 cannot:
   authentication).
 - **Truncate a file undetectably** (final-chunk AAD `is_final` flag).
 - **Reorder chunks undetectably** (chunk-index AAD).
-- **Splice chunks across files** (file_id AAD).
+- **Splice chunks across files** (chunk_key and nonce_prefix are
+  derived from file_id via HKDF; see
+  [`format-v1.md` § "Suite payloads"](./format-v1.md#suite-payloads)
+  for each suite's derivations. file_id is NOT in chunk AAD; the
+  binding is structural — see
+  [crypto PR #1](https://github.com/shieldfive/crypto/pull/1) for the
+  test vector pinning this behavior).
+
+#### Legacy v0 data
+
+Files encrypted with the v0 wire format (predating this specification —
+see
+[`format-v0.md` § "Limitations of v0"](./format-v0.md#limitations-of-v0-addressed-in-v1))
+do NOT carry the AEAD-bound integrity properties above. Specifically,
+v0 files have no chunk AAD, no `file_id` binding, and no truncation
+detection. Defense-in-depth for v0 files relies on the application's
+stored per-chunk SHA-1 hashes (`cipher_parts_sha1`), verified on
+download. Migration to v1 is required to gain the AEAD-bound integrity
+properties documented above. As of 2026-05-11, the v1 writer is
+enabled but most live data is still v0; migration policy and timeline
+are tracked separately.
 
 ### A3 — Future quantum adversary
 
@@ -54,10 +81,44 @@ A3 cannot recover plaintext from files encrypted with suite `0x03`
 - XChaCha20-Poly1305 (256-bit key, 128-bit security against Grover-like
   speedups).
 
-A3 *can* recover plaintext from files encrypted with classical-only suites
+A3 _can_ recover plaintext from files encrypted with classical-only suites
 (`0x01`, `0x02`) once Shor-feasible quantum computers exist. Files
 encrypted with classical-only suites SHOULD be re-encrypted with the
 hybrid suite when migration is feasible.
+
+#### Current deployment status
+
+As of 2026-05-11, the production web client emits suite `0x01`
+(`aes-256-gcm-v1`) for new uploads. Suite `0x03`
+(`pq-hybrid-xchacha-mlkem1024-v1`) is implemented in the
+`@shieldfive/crypto` library but is not yet wired into the web worker;
+until Phase 3 ships, all newly-uploaded files are classical-only and
+are NOT protected against A3. This document will be updated when
+`0x03` becomes the default writer suite.
+
+## Trust principals
+
+### Share-link recipient
+
+A third party in possession of a share URL and the share password is
+given decrypt authority for exactly one file. Their reach is bounded
+by:
+
+- **One file.** Each share is scoped to a single `file_id`; share URLs
+  do not enumerate folder contents or sibling files.
+- **Bounded downloads.** `share_max_downloads` is enforced atomically.
+- **Optional geo-lock and expiry.** Per-share allowed countries and
+  expiry timestamp.
+- **No key reach.** The share endpoint never returns `rk`, parent
+  folder keys, or other CSKs.
+- **Brute force.** Bcrypt-wrapped `share_password_hash` is rate
+  limited per-share, per-IP, and per-burst; lockout state is tracked
+  in `share_password_attempts` (Task 7).
+
+The recipient is a trusted third party for the single file shared; the
+system makes no confidentiality guarantee against that recipient.
+Confidentiality against A1 is unaffected (the server doesn't have the
+share password in cleartext; it has only the bcrypt hash).
 
 ## Out of scope
 
@@ -79,10 +140,16 @@ recorders, and keyloggers all see plaintext. The crypto layer cannot help.
 
 ### Metadata leakage at the storage layer
 
-File sizes, upload patterns, access timestamps, and folder cardinality are
-visible to anyone with database access. This crypto layer encrypts file
-*content* and *names*; it does not pad sizes or randomize upload timing.
-Applications requiring metadata protection beyond name encryption must
+A non-exhaustive list of metadata visible to anyone with database
+access: file sizes, upload timestamps, access timestamps, folder
+cardinality, deterministic per-user filename hashes (HMAC-SHA-256
+keyed by a per-user secret), per-share viewer geography and per-share
+hashed IP (HMAC-SHA-256 under a server secret), per-share lockout
+state and download counts, per-file owner download counts, and
+aggregate storage usage timestamps. The crypto layer encrypts file
+content and the ciphertext form of filenames; it does not encrypt
+access logs, search-hash material, or share metrics. Applications
+requiring metadata protection beyond filename-content secrecy must
 build it on top.
 
 ### Side channels in WebCrypto / WASM
@@ -97,21 +164,40 @@ underlying browser/runtime.
 If the user loses their master password and there is no recovery key, the
 data is unrecoverable. This is a feature.
 
+### Recovery-key compromise
+
+The recovery key is a 32-byte random value generated client-side at
+signup and shown to the user exactly once (regeneration is supported
+via in-app UI). Possession of the recovery key is functionally
+equivalent to knowing the password — it unwraps the same `rk` via a
+different wrapping key. The threat model treats recovery-key theft as
+out of scope (the host application's recovery-key UX, Task 19, is
+responsible for guiding users to a secure backup channel);
+confidentiality against A1 still holds for users who back the recovery
+key up to a non-leaked location. If a user backs the recovery key up
+to a leaked location (email plaintext, screenshot in cloud-synced
+photos, paper in an insecure environment), an attacker reaching that
+backup obtains the same access as the user.
+
 ## Comparison with comparable products
 
-| Product       | File AEAD                      | PQ                       | Truncation detection      | Format self-describing |
-| ------------- | ------------------------------ | ------------------------ | ------------------------- | ---------------------- |
-| Proton Drive  | AES-256-GCM (chunked)          | None (as of audit dates) | Application layer only    | No (DB-side metadata)  |
-| Internxt      | AES-256-CTR + Kyber-512 hybrid | Kyber-512 (≈AES-128 PQ)  | N/A (CTR is unauthenticated; integrity layered) | Partial          |
-| MEGA          | AES-128-CCM, Ed25519 sigs      | None                     | Application layer         | Partial                |
-| Tresorit      | AES-256-GCM, ECC               | None (as of public docs) | Application layer         | Proprietary            |
-| **ShieldFive (v1, suite 0x03)** | **XChaCha20-Poly1305 + ML-KEM-1024 hybrid** | **ML-KEM-1024 (≈AES-256 PQ)**  | **AEAD-bound**            | **Yes**                |
+| Product                          | File AEAD                                   | PQ                            | Truncation detection                            | Format self-describing |
+| -------------------------------- | ------------------------------------------- | ----------------------------- | ----------------------------------------------- | ---------------------- |
+| Proton Drive                     | AES-256-GCM (chunked)                       | None (as of audit dates)      | Application layer only                          | No (DB-side metadata)  |
+| Internxt                         | AES-256-CTR + Kyber-512 hybrid              | Kyber-512 (≈AES-128 PQ)       | N/A (CTR is unauthenticated; integrity layered) | Partial                |
+| MEGA                             | AES-128-CCM, Ed25519 sigs                   | None                          | Application layer                               | Partial                |
+| Tresorit                         | AES-256-GCM, ECC                            | None (as of public docs)      | Application layer                               | Proprietary            |
+| **ShieldFive (v1, suite 0x03)†** | **XChaCha20-Poly1305 + ML-KEM-1024 hybrid** | **ML-KEM-1024 (≈AES-256 PQ)** | **AEAD-bound**                                  | **Yes**                |
 
 This table reflects publicly available specifications and audit reports as
 of the v1 specification date. It is updated when those specifications
 change. This is not a security claim about which product is "best" — each
 makes different tradeoffs — but it documents the design positions ShieldFive
 v1 takes deliberately.
+
+† Suite `0x03` is available in the crypto library (1.0.0-alpha.3) and
+is the format-v1 spec default; the production web client has not yet
+been updated to emit it. See § "Current deployment status" under A3.
 
 ## Known limitations of v1
 
