@@ -5,9 +5,27 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-alpha.4] — 2026-05
+
+### Changed
+
+- Threat model (`spec/threat-model.md`) expanded to cover gaps surfaced
+  by internal review Task 3: explicit TLS-termination boundary in A2,
+  HKDF-structural splice-resistance prose (replacing the incorrect
+  "file_id AAD" wording that paralleled Task 1 Finding 1.1),
+  legacy-v0 AEAD-invariant carve-out under A2, A3
+  current-deployment-status subsection + comparison-table footnote
+  (suite `0x03` not yet wired into the web client), new "Trust
+  principals" section enumerating share-link recipients, expanded
+  metadata-leakage list, and a recovery-key-compromise paragraph
+  under "Out of scope". See
+  [crypto#4](https://github.com/shieldfive/crypto/pull/4) for the
+  detailed diff. Docs-only; no wire-format or code changes.
+
 ## [1.0.0-alpha.3] — 2026-05
 
 ### Fixed
+
 - Repository URLs in `package.json`, README, and CHANGELOG now correctly
   point at github.com/shieldfive/crypto. The previous metadata referenced
   github.com/shieldfive-labs, which was never actually created.
@@ -68,7 +86,7 @@ The first public release.
   successful header MAC verification proves the right content key was
   supplied before any chunk is processed.
 - Post-quantum hybrid construction: an adversary must break both
-  ML-KEM-1024 *and* the classical wrap to compromise a file. ML-KEM-1024
+  ML-KEM-1024 _and_ the classical wrap to compromise a file. ML-KEM-1024
   is FIPS 203 (NIST PQC standard, security category 5).
 
 ### Known limitations
@@ -86,4 +104,5 @@ The first public release.
 [1.0.0-alpha.1]: https://github.com/shieldfive/crypto/releases/tag/v1.0.0-alpha.1
 [1.0.0-alpha.2]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.1...v1.0.0-alpha.2
 [1.0.0-alpha.3]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.2...v1.0.0-alpha.3
-[Unreleased]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.3...HEAD
+[1.0.0-alpha.4]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.3...v1.0.0-alpha.4
+[Unreleased]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.4...HEAD
