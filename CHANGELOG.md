@@ -5,6 +5,30 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-alpha.6] — 2026-05
+
+### Added
+
+- `./streams/pq-hybrid-v1` — `createPqHybridV1DecryptStream` now accepts
+  a pre-derived 32-byte combined key K via a new `combinedKey` option,
+  in lieu of the `recipientSecretKey` + `envelopeKey` pair. When present,
+  the stream skips ML-KEM decapsulation and uses K directly for header
+  MAC verification and per-chunk AEAD. The header MAC check still
+  cryptographically gates the rest of the stream, so a wrong K fails
+  fast. Unblocks Suite 0x03 share-link recipients: they unwrap K under
+  the share-link password and never touch ML-KEM material. The
+  `PqHybridV1DecryptStreamOptions` type is now a discriminated union
+  over the two key-input modes; existing callers that pass
+  `recipientSecretKey` + `envelopeKey` are unaffected.
+- `./pq-hybrid-v1` (and `pqHybridV1` namespace on the umbrella entry) —
+  `decapsulateFromHeader`, `encapsulateForRecipient`, and the
+  `PQ_HYBRID_V1_SUITE_PAYLOAD_LENGTH` constant are now publicly
+  re-exported from the suite's public surface (`api.ts`). The previous
+  release exposed them only on the internal `index.js` path. Lets
+  callers that hold the parsed `suite_payload` + KEM material (e.g.,
+  share-link generators that need to derive K out-of-band) reach the
+  primitives without importing from a deep internal path.
+
 ## [1.0.0-alpha.5] — 2026-05
 
 ### Added

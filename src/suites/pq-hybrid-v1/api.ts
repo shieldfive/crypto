@@ -41,6 +41,18 @@ import {
 } from '../../internal/encoding.js'
 import { randomBytes } from '../../internal/runtime.js'
 
+// Re-exports of suite primitives that are useful to callers outside the
+// streaming/whole-blob API surfaces. `decapsulateFromHeader` lets a
+// caller that already has the parsed suite_payload + KEM material
+// recover the combined key K out-of-band (e.g., a share-link generator
+// that wraps K under a separate password for recipients who never see
+// ML-KEM secrets).
+export {
+  decapsulateFromHeader,
+  encapsulateForRecipient,
+  PQ_HYBRID_V1_SUITE_PAYLOAD_LENGTH,
+} from './index.js'
+
 const LENGTH_PREFIX_BYTES = 4
 
 export interface PqHybridEncryptOptions {
