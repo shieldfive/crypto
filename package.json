@@ -1,6 +1,6 @@
 {
   "name": "@shieldfive/crypto",
-  "version": "1.0.0-alpha.4",
+  "version": "1.0.0-alpha.5",
   "description": "Open, audited-ready, post-quantum-hybrid client-side encryption for cloud storage. The cryptographic core of ShieldFive.",
   "type": "module",
   "license": "Apache-2.0",
@@ -51,6 +51,10 @@
     "./streams/aes-gcm-v1": {
       "types": "./dist/streams/aes-gcm-v1.d.ts",
       "default": "./dist/streams/aes-gcm-v1.js"
+    },
+    "./streams/pq-hybrid-v1": {
+      "types": "./dist/streams/pq-hybrid-v1.d.ts",
+      "default": "./dist/streams/pq-hybrid-v1.js"
     },
     "./kdf/argon2id": {
       "types": "./dist/kdf/argon2id.d.ts",
