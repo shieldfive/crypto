@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `PqHybridV1DecryptStreamOptions` type is now a discriminated union
   over the two key-input modes; existing callers that pass
   `recipientSecretKey` + `envelopeKey` are unaffected.
+- `./pq-hybrid-v1` (and `pqHybridV1` namespace on the umbrella entry) —
+  `decapsulateFromHeader`, `encapsulateForRecipient`, and the
+  `PQ_HYBRID_V1_SUITE_PAYLOAD_LENGTH` constant are now publicly
+  re-exported from the suite's public surface (`api.ts`). The previous
+  release exposed them only on the internal `index.js` path. Lets
+  callers that hold the parsed `suite_payload` + KEM material (e.g.,
+  share-link generators that need to derive K out-of-band) reach the
+  primitives without importing from a deep internal path.
 
 ## [1.0.0-alpha.5] — 2026-05
 
