@@ -5,6 +5,16 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-alpha.5] — 2026-05
+
+### Added
+
+- `./streams/pq-hybrid-v1` — TransformStream factory for streaming
+  encrypt/decrypt under Suite 0x03 (ML-KEM-1024 + XChaCha20-Poly1305).
+  Same shape as `./streams/aes-gcm-v1`, suite primitive swapped. Unblocks
+  the web app's Phase 3 implementation (Step 14) per the design doc at
+  `web/docs/phase3-design.md`.
+
 ## [1.0.0-alpha.4] — 2026-05
 
 ### Changed
@@ -105,4 +115,5 @@ The first public release.
 [1.0.0-alpha.2]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.1...v1.0.0-alpha.2
 [1.0.0-alpha.3]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.2...v1.0.0-alpha.3
 [1.0.0-alpha.4]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.3...v1.0.0-alpha.4
-[Unreleased]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.4...HEAD
+[1.0.0-alpha.5]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.4...v1.0.0-alpha.5
+[Unreleased]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.5...HEAD
