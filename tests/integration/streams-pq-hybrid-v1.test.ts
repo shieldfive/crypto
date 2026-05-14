@@ -15,6 +15,7 @@ import {
   createPqHybridV1EncryptStream,
   decryptStreamPqHybridV1,
   encryptStreamPqHybridV1,
+  type PqHybridV1DecryptStreamOptions,
 } from '../../src/streams/pq-hybrid-v1.js'
 import * as pq from '../../src/suites/pq-hybrid-v1/api.js'
 import {
@@ -523,4 +524,90 @@ test('pq-hybrid stream decrypt: produces output progressively (not buffered to e
     const { done } = await reader.read()
     if (done) break
   }
+})
+
+// ─────────────────────────────────────────────────────────────────────
+// combinedKey-only decrypt mode (share-recipient path, Suite 0x03)
+// ─────────────────────────────────────────────────────────────────────
+
+test('pq-hybrid stream decrypt: combinedKey-only mode round-trips without ML-KEM secret', async () => {
+  const { publicKey } = generateMlKemKeypair()
+  const envelopeKey = randomBytes(32)
+  const plaintext = randomBytes(4096 * 3 + 17)
+  const { ciphertext, combinedKey } = await encryptStreamPqHybridV1(
+    streamFrom(plaintext),
+    {
+      recipientPublicKey: publicKey,
+      envelopeKey,
+      plaintextSize: plaintext.length,
+      chunkSize: 4096,
+    },
+  )
+  const ct = await drain(ciphertext)
+  const pt = await drain(
+    decryptStreamPqHybridV1(streamFrom(ct), { combinedKey }),
+  )
+  assert.ok(bytesEqual(plaintext, pt))
+})
+
+test('pq-hybrid stream decrypt: combinedKey-only mode rejects wrong K', async () => {
+  const { publicKey } = generateMlKemKeypair()
+  const envelopeKey = randomBytes(32)
+  const { ciphertext } = await encryptStreamPqHybridV1(
+    streamFrom(randomBytes(2048)),
+    {
+      recipientPublicKey: publicKey,
+      envelopeKey,
+      plaintextSize: 2048,
+      chunkSize: 1024,
+    },
+  )
+  const ct = await drain(ciphertext)
+  await assert.rejects(() =>
+    drain(
+      decryptStreamPqHybridV1(streamFrom(ct), {
+        combinedKey: randomBytes(32),
+      }),
+    ),
+  )
+})
+
+test('pq-hybrid stream decrypt: combinedKey-only mode detects truncated ciphertext', async () => {
+  const { publicKey } = generateMlKemKeypair()
+  const envelopeKey = randomBytes(32)
+  const plaintext = randomBytes(8192)
+  const { ciphertext, combinedKey } = await encryptStreamPqHybridV1(
+    streamFrom(plaintext),
+    {
+      recipientPublicKey: publicKey,
+      envelopeKey,
+      plaintextSize: plaintext.length,
+      chunkSize: 1024,
+    },
+  )
+  const ct = await drain(ciphertext)
+  const truncated = ct.slice(
+    0,
+    ct.length - (4 + 1024 + PQ_HYBRID_V1_TAG_BYTES),
+  )
+  await assert.rejects(() =>
+    drain(
+      decryptStreamPqHybridV1(streamFrom(truncated), { combinedKey }),
+    ),
+  )
+})
+
+test('pq-hybrid stream decrypt: combinedKey-only mode rejects 31-byte K (length check)', () => {
+  assert.throws(() =>
+    createPqHybridV1DecryptStream({ combinedKey: new Uint8Array(31) }),
+  )
+})
+
+test('pq-hybrid stream decrypt: missing both KEM secret and combinedKey throws', () => {
+  // Casting around the type union: the runtime guard must reject this too,
+  // for callers who reach the factory via a less-typed path (e.g., across
+  // a worker postMessage boundary).
+  assert.throws(() =>
+    createPqHybridV1DecryptStream({} as PqHybridV1DecryptStreamOptions),
+  )
 })

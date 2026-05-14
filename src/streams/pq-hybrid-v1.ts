@@ -243,12 +243,37 @@ export function createPqHybridV1EncryptStream(
 // Decrypting transform
 // ─────────────────────────────────────────────────────────────────────
 
-export interface PqHybridV1DecryptStreamOptions {
-  /** Recipient's ML-KEM-1024 secret key (3168 bytes) */
-  recipientSecretKey: Uint8Array
-  /** Classical envelope key (32 bytes) */
-  envelopeKey: Uint8Array
-}
+/**
+ * Inputs for {@link createPqHybridV1DecryptStream}. Either provide the
+ * KEM material (`recipientSecretKey` + `envelopeKey`) so the stream can
+ * derive the combined key itself, OR provide the already-derived
+ * `combinedKey` directly. The latter is what share-link recipients use:
+ * they hold a 32-byte K (wrapped under the share-link password) and
+ * never see the ML-KEM secret key.
+ *
+ * Mixing both modes is not supported — `combinedKey` always wins. The
+ * caller is responsible for picking one path.
+ */
+export type PqHybridV1DecryptStreamOptions =
+  | {
+      /** Recipient's ML-KEM-1024 secret key (3168 bytes). */
+      recipientSecretKey: Uint8Array
+      /** Classical envelope key (32 bytes). */
+      envelopeKey: Uint8Array
+      combinedKey?: undefined
+    }
+  | {
+      /**
+       * Pre-derived 32-byte combined key K. When provided, the stream
+       * skips ML-KEM decapsulation entirely and uses K for header MAC
+       * verification + per-chunk AEAD. Header MAC validation still
+       * cryptographically gates the rest of the stream, so a wrong K
+       * fails fast.
+       */
+      combinedKey: Uint8Array
+      recipientSecretKey?: undefined
+      envelopeKey?: undefined
+    }
 
 /**
  * Build a TransformStream that decrypts a v1 ciphertext stream produced
@@ -256,18 +281,38 @@ export interface PqHybridV1DecryptStreamOptions {
  * version processes input incrementally — useful for very large files or
  * when ciphertext arrives chunked over the network.
  *
- * PQ decapsulation runs once, the moment the header has been buffered,
- * before any chunk is processed. After that the stream behaves
- * identically to the AES-GCM-v1 decrypt stream.
+ * Two key-input modes:
+ *   - KEM mode (`recipientSecretKey` + `envelopeKey`): the stream runs
+ *     ML-KEM decapsulation once, the moment the header has been
+ *     buffered, then proceeds identically to the AES-GCM-v1 decrypt
+ *     stream.
+ *   - Combined-key mode (`combinedKey`): skips decapsulation entirely
+ *     and uses the supplied K for header MAC verification + chunk AEAD.
+ *     Intended for share-link recipients who hold a wrapped K but no
+ *     ML-KEM secret.
  */
 export function createPqHybridV1DecryptStream(
   options: PqHybridV1DecryptStreamOptions,
 ): TransformStream<Uint8Array, Uint8Array> {
-  const { recipientSecretKey, envelopeKey } = options
-  if (envelopeKey.length !== 32) {
-    throw new RangeError('decrypt stream: envelopeKey must be 32 bytes')
+  const combinedKeyOverride = options.combinedKey
+  const recipientSecretKey = options.recipientSecretKey
+  const envelopeKey = options.envelopeKey
+
+  if (combinedKeyOverride) {
+    if (combinedKeyOverride.length !== 32) {
+      throw new RangeError('decrypt stream: combinedKey must be 32 bytes')
+    }
+  } else {
+    if (!recipientSecretKey || !envelopeKey) {
+      throw new RangeError(
+        'decrypt stream: provide either combinedKey or recipientSecretKey + envelopeKey',
+      )
+    }
+    if (envelopeKey.length !== 32) {
+      throw new RangeError('decrypt stream: envelopeKey must be 32 bytes')
+    }
+    // Length of recipientSecretKey is checked inside decapsulateFromHeader.
   }
-  // Length of recipientSecretKey is checked inside decapsulateFromHeader.
 
   // Phases:
   //   0 = waiting for header bytes
@@ -336,15 +381,22 @@ export function createPqHybridV1DecryptStream(
       )
     }
 
-    // Recover the combined key — this is where PQ decapsulation happens.
-    // The header MAC implicitly verifies that the right combined key was
-    // recovered (i.e., the PQ secret + envelope key match the file).
-    const { combinedKey } = await decapsulateFromHeader({
-      suitePayload: parsedHeader.suitePayload,
-      recipientSecretKey,
-      envelopeKey,
-      fileId: parsedHeader.fileId,
-    })
+    // Recover the combined key. Two paths:
+    //   - KEM mode: run ML-KEM decapsulation now.
+    //   - Combined-key mode: trust the supplied K. The header MAC check
+    //     below still cryptographically gates the rest of the stream, so
+    //     a wrong K fails fast.
+    let combinedKey: Uint8Array
+    if (combinedKeyOverride) {
+      combinedKey = combinedKeyOverride
+    } else {
+      ;({ combinedKey } = await decapsulateFromHeader({
+        suitePayload: parsedHeader.suitePayload,
+        recipientSecretKey: recipientSecretKey!,
+        envelopeKey: envelopeKey!,
+        fileId: parsedHeader.fileId,
+      }))
+    }
 
     const { verifyHeaderMac } = await import('../format/header.js')
     await verifyHeaderMac(parsedHeader, combinedKey)
@@ -511,7 +563,9 @@ export async function encryptStreamPqHybridV1(
 
 /**
  * Pipe a ReadableStream<Uint8Array> through the PQ-hybrid-v1 decrypt
- * transform and return the resulting plaintext ReadableStream.
+ * transform and return the resulting plaintext ReadableStream. See
+ * {@link PqHybridV1DecryptStreamOptions} for the two key-input modes
+ * (KEM secret + envelope vs. pre-derived combined key K).
  */
 export function decryptStreamPqHybridV1(
   source: ReadableStream<Uint8Array>,
