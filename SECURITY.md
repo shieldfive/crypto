@@ -1,6 +1,6 @@
 # Security Policy
 
-ShieldFive Labs takes the security of `@shieldfive/crypto` seriously. This
+ShieldFive takes the security of `@shieldfive/crypto` seriously. This
 document describes how to report a vulnerability, what we commit to, and
 the safe-harbor terms for security researchers.
 
