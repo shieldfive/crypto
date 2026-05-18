@@ -10,8 +10,11 @@ the safe-harbor terms for security researchers.
 us directly:
 
 - **Email:** `security@shieldfive.com`
-- **PGP key fingerprint:** *(to be published at v1.0.0 stable release)*
-- **Public PGP key:** `https://shieldfive.com/.well-known/security/pgp-key.txt`
+- **PGP key:** Not yet published. Encrypt with a temporary key on
+  request, or send in plaintext — we'd rather know about the issue
+  than have it sit in your inbox. The permanent PGP key fingerprint
+  will be published at v1.0.0 stable release alongside the URL
+  `https://shieldfive.com/.well-known/security/pgp-key.txt`.
 
 If you cannot encrypt the report, send it in plaintext anyway — we would
 rather hear about a vulnerability in plaintext than not at all. We will
@@ -120,4 +123,4 @@ with their consent.)
 
 ---
 
-Last updated: v1.0.0-alpha.1
+Last updated: v1.0.0-alpha.6

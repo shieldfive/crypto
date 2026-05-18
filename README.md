@@ -5,7 +5,7 @@
 > [ShieldFive](https://shieldfive.com), released as a standalone library.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-126%2F126-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-155%2F155-brightgreen.svg)](tests/)
 [![Status](https://img.shields.io/badge/status-alpha-orange.svg)](#status)
 
 ## Status & honest scope
@@ -17,7 +17,7 @@ treat this library as a serious work-in-progress rather than a finished
 product.
 
 The design choices documented in [`spec/`](spec/) are deliberate and
-reviewable. The implementation is covered by 126 passing tests including
+reviewable. The implementation is covered by 155 passing tests including
 truncation, reordering, splice, and tampering detection across all four
 suites. That is enough for internal dogfooding. It is **not** enough to
 claim "most secure crypto library" — that claim requires external review
@@ -32,7 +32,7 @@ spec section that documents the choice.
 
 | Property                                   | This library | Proton OpenPGP.js | Internxt SDK | MEGA SDK |
 | ------------------------------------------ | :----------: | :---------------: | :----------: | :------: |
-| Post-quantum hybrid by default             |      ✅      |        ❌         |      ⚠️      |    ❌    |
+| Post-quantum hybrid by default             |      ✅      |        ⚠️         |      ⚠️      |    ❌    |
 | ML-KEM-1024 (NIST PQC level 5)             |      ✅      |        ❌         |  ❌ (Kyber-512) |    ❌    |
 | Self-describing on-disk file format        |      ✅      |        ✅         |      ⚠️      |    ⚠️    |
 | Cipher-suite agile (one byte selects)      |      ✅      |        ⚠️         |      ❌      |    ❌    |
@@ -43,7 +43,12 @@ spec section that documents the choice.
 | Apache 2.0 (patent grant)                  |      ✅      |        ⚠️ (LGPL)  |      ⚠️      |    ⚠️    |
 
 ⚠️ = partial or feature-flagged. See [`spec/threat-model.md`](spec/threat-model.md)
-for the comparison methodology and source citations.
+for the comparison methodology and source citations. Proton OpenPGP.js
+added optional post-quantum (ML-KEM + ECC hybrid) support via OpenPGP v6
+in May 2026 (proton.me/blog/introducing-post-quantum-encryption); it is
+opt-in, not default — hence ⚠️ rather than ✅ in the table. Comparison
+cells reflect publicly available specifications and audit reports as of
+2026-05-18 and will be updated as upstreams change.
 
 ## Quick start
 
@@ -213,7 +218,7 @@ Requires Node 20+.
 
 **Alpha.** The wire format is frozen for the v1 release, but the public
 TypeScript API may make small adjustments before 1.0.0 stable. Test
-coverage is comprehensive (64 tests, all four suites, all architectural
+coverage is comprehensive (155 tests, all four suites, all architectural
 guarantees verified). A formal third-party security audit is planned for
 the 1.0.0 stable milestone — until that audit lands, treat this library
 as a serious work-in-progress rather than a finished product.
@@ -233,7 +238,10 @@ in good faith are protected under the safe-harbor clause.
 ## Acknowledgements
 
 - [@noble/post-quantum](https://github.com/paulmillr/noble-post-quantum)
-  by Paul Miller — clean, audited ML-KEM-1024 implementation.
+  by Paul Miller — clean, minimal ML-KEM-1024 implementation. Upstream
+  notes the library has not been independently audited (an LLM-assisted
+  self-audit was completed in April 2026); ShieldFive's PQ surface
+  inherits that status until a third-party audit lands.
 - [libsodium](https://github.com/jedisct1/libsodium) — XChaCha20-Poly1305
   and XSalsa20-Poly1305 secretbox.
 - The NIST PQC competition and FIPS 203 authors.

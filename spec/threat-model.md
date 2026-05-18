@@ -183,17 +183,21 @@ backup obtains the same access as the user.
 
 | Product                          | File AEAD                                   | PQ                            | Truncation detection                            | Format self-describing |
 | -------------------------------- | ------------------------------------------- | ----------------------------- | ----------------------------------------------- | ---------------------- |
-| Proton Drive                     | AES-256-GCM (chunked)                       | None (as of audit dates)      | Application layer only                          | No (DB-side metadata)  |
+| Proton Drive                     | AES-256-GCM (chunked)                       | Proton Mail (sibling product) added optional PQ via OpenPGP v6 in May 2026; Proton Drive's on-disk format had not adopted PQ as of 2026-05-18 | Application layer only                          | No (DB-side metadata)  |
 | Internxt                         | AES-256-CTR + Kyber-512 hybrid              | Kyber-512 (≈AES-128 PQ)       | N/A (CTR is unauthenticated; integrity layered) | Partial                |
 | MEGA                             | AES-128-CCM, Ed25519 sigs                   | None                          | Application layer                               | Partial                |
 | Tresorit                         | AES-256-GCM, ECC                            | None (as of public docs)      | Application layer                               | Proprietary            |
 | **ShieldFive (v1, suite 0x03)†** | **XChaCha20-Poly1305 + ML-KEM-1024 hybrid** | **ML-KEM-1024 (≈AES-256 PQ)** | **AEAD-bound**                                  | **Yes**                |
 
 This table reflects publicly available specifications and audit reports as
-of the v1 specification date. It is updated when those specifications
-change. This is not a security claim about which product is "best" — each
-makes different tradeoffs — but it documents the design positions ShieldFive
-v1 takes deliberately.
+of 2026-05-18 (last access date). It is updated when those specifications
+change — for example, Proton Mail (sibling product to Proton Drive)
+launched optional post-quantum encryption via OpenPGP v6 in May 2026
+(proton.me/blog/introducing-post-quantum-encryption); the Proton Drive
+on-disk wire format had not adopted PQ as of the access date. This is not
+a security claim about which product is "best" — each makes different
+tradeoffs — but it documents the design positions ShieldFive v1 takes
+deliberately.
 
 † Suite `0x03` is available in the crypto library (1.0.0-alpha.3) and
 is the format-v1 spec default; the production web client has not yet
