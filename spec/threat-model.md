@@ -50,7 +50,7 @@ A2 cannot:
   [`format-v1.md` § "Suite payloads"](./format-v1.md#suite-payloads)
   for each suite's derivations. file_id is NOT in chunk AAD; the
   binding is structural — see
-  [crypto PR #1](https://github.com/shieldfive/crypto/pull/1) for the
+  [crypto PR #1](https://github.com/shieldfive/crypto/commit/f17d7e3) for the
   test vector pinning this behavior).
 
 #### Legacy v0 data
