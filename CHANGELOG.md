@@ -53,7 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   principals" section enumerating share-link recipients, expanded
   metadata-leakage list, and a recovery-key-compromise paragraph
   under "Out of scope". See
-  [crypto#4](https://github.com/shieldfive/crypto/commit/4956cd2) for the
+  [crypto#4](https://github.com/shieldfive/crypto/commit/bb967cb) for the
   detailed diff. Docs-only; no wire-format or code changes.
 
 ## [1.0.0-alpha.3] — 2026-05
