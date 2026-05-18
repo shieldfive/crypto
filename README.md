@@ -139,6 +139,25 @@ const plaintext = await decryptV0({
 
 There is no `encryptV0`. New writes must use a v1 suite.
 
+### Decrypting an exported ShieldFive backup
+
+A ShieldFive user can export their account at any time and
+decrypt the resulting bundle offline using this library plus the
+small Node script that ships at
+[shieldfive.com/export](https://shieldfive.com/export). The
+recipe walks the key hierarchy (master password → user key →
+root key → folder keys → per-file content keys), re-derives the
+ML-KEM-1024 secret for Suite 0x03 files deterministically from
+the root key (per `spec/key-derivation.md`), and feeds each blob
+into `autoDecryptBlob` here.
+
+The recipe and the script live in the web repository so that the
+documented version stays in lock-step with the API surface; this
+library is the decryption primitive the script depends on. If
+you want to reproduce the path from first principles (with no
+ShieldFive code in the loop), `spec/format-v1.md` and
+`spec/key-derivation.md` together describe everything needed.
+
 ## File format
 
 The complete v1 wire format is documented in
