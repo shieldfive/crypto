@@ -25,7 +25,7 @@
     "webcrypto",
     "cloud-storage"
   ],
-  "author": "ShieldFive Labs <security@shieldfive.com>",
+  "author": "Cho Garcia <security@shieldfive.com>",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

@@ -246,4 +246,4 @@ in good faith are protected under the safe-harbor clause.
   and XSalsa20-Poly1305 secretbox.
 - The NIST PQC competition and FIPS 203 authors.
 
-— *ShieldFive Labs*
+— Cho Garcia, maintainer
