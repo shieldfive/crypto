@@ -123,4 +123,4 @@ with their consent.)
 
 ---
 
-Last updated: v1.0.0-alpha.6
+Last updated: v1.0.0-alpha.7

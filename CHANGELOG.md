@@ -5,6 +5,31 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-alpha.7] — 2026-05
+
+### Dependencies
+
+- Bump `@noble/post-quantum` from `^0.5.3` (resolved 0.5.4) to
+  `^0.6.0` (resolves to 0.6.1). The upstream maintainer self-audit
+  released alongside 0.6.1 (April 2026) covers the line ShieldFive
+  now ships; the 0.5.x line predates the self-audit. The pinned
+  `10_ml_kem_keypair_derivation` test vector in
+  `tests/vectors/vectors.json` is byte-identical under 0.6.1 and
+  0.5.4 (both implement final FIPS 203 ML-KEM-1024), so no vector
+  refresh was required. Wire format and on-disk format are
+  byte-identical to prior alphas for the same plaintext, key, and
+  file_id inputs.
+
+### Documentation
+
+- README dependency acknowledgement rewritten to accurately
+  describe the noble-post-quantum version (^0.6.0, resolving to
+  0.6.1) and audit status (upstream self-audit April 2026; no
+  independent external audit of either the upstream library or
+  the ShieldFive PQ-hybrid construction on top of it). Closes the
+  audit punch-list item under `audit/launch/cho-deep-audit-2026-05-19`
+  § P0-7.
+
 ## [1.0.0-alpha.6] — 2026-05
 
 ### Added
@@ -140,4 +165,6 @@ The first public release.
 [1.0.0-alpha.3]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.2...v1.0.0-alpha.3
 [1.0.0-alpha.4]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.3...v1.0.0-alpha.4
 [1.0.0-alpha.5]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.4...v1.0.0-alpha.5
-[Unreleased]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.5...HEAD
+[1.0.0-alpha.6]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.5...v1.0.0-alpha.6
+[1.0.0-alpha.7]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.6...v1.0.0-alpha.7
+[Unreleased]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.7...HEAD
