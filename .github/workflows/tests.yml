@@ -38,6 +38,9 @@ jobs:
       - name: Run integration tests
         run: node --import tsx --test tests/integration/*.test.ts
 
+      - name: Run vector tests
+        run: node --import tsx --test tests/vectors/*.test.ts
+
       - name: Build
         run: npm run build
 
