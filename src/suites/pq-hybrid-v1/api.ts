@@ -66,6 +66,19 @@ export interface PqHybridEncryptOptions {
   onProgress?: ProgressCallback
 }
 
+/**
+ * Encrypt a Blob under suite 0x03 (PQ-hybrid XChaCha20-Poly1305 +
+ * ML-KEM-1024). Returns the encrypted file alongside the combined
+ * content key used to produce it.
+ *
+ * SECURITY: The returned `combinedKey` grants permanent decryption
+ * capability for any file whose header was produced with it. Treat
+ * as cryptographic secret material: hold only in memory for the
+ * duration of the operation, do not persist to disk or storage, do
+ * not log, do not transmit. The only safe way to reproduce it on
+ * another machine is to re-encapsulate via the recipient's ML-KEM
+ * public key.
+ */
 export async function encryptBlob(
   options: PqHybridEncryptOptions,
 ): Promise<EncryptedFile & { combinedKey: Uint8Array }> {
@@ -255,6 +268,19 @@ export async function decryptBlob(
   return new Blob(plaintextParts, { type: 'application/octet-stream' })
 }
 
+/**
+ * Encrypt a Uint8Array under suite 0x03 (PQ-hybrid XChaCha20-Poly1305 +
+ * ML-KEM-1024). Returns the encrypted file alongside the combined
+ * content key used to produce it.
+ *
+ * SECURITY: The returned `combinedKey` grants permanent decryption
+ * capability for any file whose header was produced with it. Treat
+ * as cryptographic secret material: hold only in memory for the
+ * duration of the operation, do not persist to disk or storage, do
+ * not log, do not transmit. The only safe way to reproduce it on
+ * another machine is to re-encapsulate via the recipient's ML-KEM
+ * public key.
+ */
 export async function encryptBytes(
   bytes: Uint8Array,
   options: Omit<PqHybridEncryptOptions, 'blob'>,

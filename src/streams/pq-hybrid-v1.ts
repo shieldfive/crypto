@@ -63,6 +63,14 @@ export interface PqHybridV1EncryptStreamOptions {
   /**
    * Combined content key from `encapsulateForRecipient`. 32 bytes. Used
    * both for header MAC and for chunk AEAD.
+   *
+   * SECURITY: Possession of `combinedKey` grants permanent decryption
+   * capability for any file whose header was produced with it. Treat
+   * as cryptographic secret material: hold only in memory for the
+   * duration of the operation, do not persist to disk or storage, do
+   * not log, do not transmit. The only safe way to reproduce it on
+   * another machine is to re-encapsulate via the recipient's ML-KEM
+   * public key.
    */
   combinedKey: Uint8Array
   /** 16-byte file_id used as HKDF salt in encapsulation and key derivation. */
@@ -78,7 +86,17 @@ export interface PqHybridV1EncryptStreamOptions {
 export interface PqHybridV1EncryptStreamResult {
   /** TransformStream<Uint8Array, Uint8Array> emitting the v1 wire format. */
   stream: TransformStream<Uint8Array, Uint8Array>
-  /** The combined key used (echoed back for caller convenience). */
+  /**
+   * SECURITY: Possession of `combinedKey` grants permanent decryption
+   * capability for any file whose header was produced with it. Treat
+   * as cryptographic secret material: hold only in memory for the
+   * duration of the operation, do not persist to disk or storage, do
+   * not log, do not transmit. The only safe way to reproduce it on
+   * another machine is to re-encapsulate via the recipient's ML-KEM
+   * public key.
+   *
+   * Echoed back for caller convenience.
+   */
   combinedKey: Uint8Array
   /** The file_id used (echoed back for caller convenience). */
   fileId: Uint8Array
