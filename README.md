@@ -257,10 +257,17 @@ in good faith are protected under the safe-harbor clause.
 ## Acknowledgements
 
 - [@noble/post-quantum](https://github.com/paulmillr/noble-post-quantum)
-  by Paul Miller — clean, minimal ML-KEM-1024 implementation. Upstream
-  notes the library has not been independently audited (an LLM-assisted
-  self-audit was completed in April 2026); ShieldFive's PQ surface
-  inherits that status until a third-party audit lands.
+  by Paul Miller — clean, minimal ML-KEM-1024 (FIPS 203)
+  implementation. ShieldFive pins `^0.6.0`, which resolves to the 0.6.1
+  release. Upstream completed a maintainer self-audit at 0.6.1 in
+  April 2026 (see the
+  ["Security"](https://github.com/paulmillr/noble-post-quantum#security)
+  section of the upstream README) and has **not** been independently
+  audited by an external firm. ShieldFive's PQ-hybrid construction on
+  top of the library — the HKDF-SHA-256 combiner that mixes the
+  classical and ML-KEM shares — has also not received an independent
+  external audit. A third-party audit of the ShieldFive layer is
+  planned for the v1.0.0 stable milestone.
 - [libsodium](https://github.com/jedisct1/libsodium) — XChaCha20-Poly1305
   and XSalsa20-Poly1305 secretbox.
 - The NIST PQC competition and FIPS 203 authors.
