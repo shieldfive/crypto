@@ -287,6 +287,14 @@ export type PqHybridV1DecryptStreamOptions =
        * verification + per-chunk AEAD. Header MAC validation still
        * cryptographically gates the rest of the stream, so a wrong K
        * fails fast.
+       *
+       * SECURITY: Possession of `combinedKey` grants permanent decryption
+       * capability for any file whose header was produced with it. Treat
+       * as cryptographic secret material: hold only in memory for the
+       * duration of the operation, do not persist to disk or storage, do
+       * not log, do not transmit. The only safe way to reproduce it on
+       * another machine is to re-encapsulate via the recipient's ML-KEM
+       * public key.
        */
       combinedKey: Uint8Array
       recipientSecretKey?: undefined
@@ -533,11 +541,22 @@ export interface EncryptStreamPqHybridV1Options {
 
 /**
  * Pipe a ReadableStream<Uint8Array> through the PQ-hybrid-v1 encrypt
- * transform and return the resulting ReadableStream + the materials the
- * caller will need to store alongside the file (file_id) or share back
- * to the sender's records (combined key, suite payload).
+ * transform and return the resulting ReadableStream alongside the
+ * derived material the caller will need: the 16-byte file_id (safe
+ * to persist with the ciphertext), the suite payload (safe to
+ * persist with the ciphertext; required for later decapsulation),
+ * and the 32-byte combined key.
  *
- * This helper is async because PQ encapsulation requires libsodium init.
+ * SECURITY: The returned `combinedKey` grants permanent decryption
+ * capability for any file whose header was produced with it. Treat
+ * as cryptographic secret material: hold only in memory for the
+ * duration of the operation, do not persist to disk or storage, do
+ * not log, do not transmit. The only safe way to reproduce it on
+ * another machine is to re-encapsulate via the recipient's ML-KEM
+ * public key.
+ *
+ * This helper is async because PQ encapsulation requires libsodium
+ * init.
  */
 export async function encryptStreamPqHybridV1(
   source: ReadableStream<Uint8Array>,
