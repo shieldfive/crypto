@@ -49,7 +49,9 @@ import { randomBytes } from '../../internal/runtime.js'
 // ML-KEM secrets).
 export {
   decapsulateFromHeader,
+  deriveMlKemKeypair,
   encapsulateForRecipient,
+  generateMlKemKeypair,
   PQ_HYBRID_V1_SUITE_PAYLOAD_LENGTH,
 } from './index.js'
 
