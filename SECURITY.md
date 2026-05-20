@@ -77,15 +77,19 @@ policy, we will make this authorization clear.
 
 ## Bug bounty
 
-We do not currently operate a paid bug bounty program for the open-source
-crypto library. We do operate a paid bounty for vulnerabilities in the
-ShieldFive product itself; see https://shieldfive.com/security for details.
+ShieldFive operates a paid bug bounty program covering this
+open-source crypto library. Reward tiers:
 
-For library vulnerabilities, we offer:
+- Critical: up to €1000
+- High: up to €500
+- Medium: up to €250
 
-- Public credit (CVE, release notes, dedicated thank-you page).
-- ShieldFive product credits or merchandise for high-impact reports.
-- For critical findings, ad-hoc bounties at our discretion.
+Lower-impact findings receive public credit (CVE, release notes,
+dedicated thank-you page) and product credits.
+
+For current scope, rules of engagement, submission instructions,
+and the safe-harbor statement, see
+https://shieldfive.com/security/bug-bounty.
 
 ## Out of scope
 
