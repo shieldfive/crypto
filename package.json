@@ -1,6 +1,6 @@
 {
   "name": "@shieldfive/crypto",
-  "version": "1.0.0-alpha.7",
+  "version": "1.0.0-alpha.8",
   "description": "Open, audited-ready, post-quantum-hybrid client-side encryption for cloud storage. The cryptographic core of ShieldFive.",
   "type": "module",
   "license": "Apache-2.0",
