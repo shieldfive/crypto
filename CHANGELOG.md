@@ -5,6 +5,18 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-alpha.9] — 2026-05
+
+### Documentation
+
+- docs(security): align SECURITY.md bug-bounty section with
+  shieldfive.com/security/bug-bounty. The previous wording said no
+  paid bounty existed for the open-source crypto library; the
+  operator-run program at shieldfive.com/security/bug-bounty has
+  always covered this library with €1000/€500/€250 tiers, so
+  SECURITY.md now points there instead of contradicting it. Audit
+  punch-list item P0-4.
+
 ## [1.0.0-alpha.8] — 2026-05
 
 ### Fixed
@@ -175,4 +187,5 @@ The first public release.
 [1.0.0-alpha.5]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.4...v1.0.0-alpha.5
 [1.0.0-alpha.6]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.5...v1.0.0-alpha.6
 [1.0.0-alpha.7]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.6...v1.0.0-alpha.7
+[1.0.0-alpha.9]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.8...v1.0.0-alpha.9
 [Unreleased]: https://github.com/shieldfive/crypto/compare/v1.0.0-alpha.7...HEAD
