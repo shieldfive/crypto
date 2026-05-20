@@ -17,6 +17,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SECURITY.md now points there instead of contradicting it. Audit
   punch-list item P0-4.
 
+### Changed
+
+- chore(package): drop "audited-ready" from the npm description.
+  No external audit has been performed; the project's audit
+  posture is documented in SECURITY.md and continues to be
+  "self-reviewed, external audit deferred". Audit punch-list
+  item P1-D.
+- chore(license): replace "Copyright 2026 ShieldFive" with
+  "Copyright 2026 Cho Garcia" in LICENSE (Apache-2.0 attribution
+  block). Audit punch-list item P1-C.
+- chore(crypto): bump `SHIELDFIVE_CRYPTO_VERSION` constant in
+  `src/index.ts` to match the published package version
+  (previously stale at 1.0.0-alpha.6).
+
 ## [1.0.0-alpha.8] — 2026-05
 
 ### Fixed
