@@ -29,7 +29,7 @@ import {
 } from '../../src/internal/encoding.js'
 import { hkdfSha256 } from '../../src/internal/hkdf.js'
 import { hmacSha256 } from '../../src/internal/hmac.js'
-import { HEADER_SIZES, HKDF_INFO, SUITE } from '../../src/internal/types.js'
+import { HKDF_INFO, SUITE } from '../../src/internal/types.js'
 
 import * as aes from '../../src/suites/aes-gcm-v1/api.js'
 import * as xchacha from '../../src/suites/xchacha-v1/api.js'

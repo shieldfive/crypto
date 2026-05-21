@@ -113,9 +113,12 @@
     "@noble/post-quantum": "^0.6.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.10.0",
+    "eslint": "^10.4.0",
     "libsodium-wrappers-sumo": "^0.8.2",
     "tsx": "^4.20.0",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.59.4"
   }
 }
