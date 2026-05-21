@@ -28,6 +28,20 @@ import {
   parsePqHybridV1SuitePayload,
   buildPqHybridV1SuitePayload,
 } from '../suites/pq-hybrid-v1/index.js'
+export {
+  SIGNATURE_ALGO_ED25519,
+  SIGNATURE_ALGO_ML_DSA_65,
+  ED25519_PUBLIC_KEY_LENGTH,
+  ED25519_SECRET_KEY_LENGTH,
+  ED25519_SIGNATURE_LENGTH,
+  SignatureError,
+  buildSignatureBlock,
+  deriveEd25519PublicKey,
+  parseSignatureBlock,
+  signHeaderAndMacs,
+  verifyHeaderAndMacs,
+} from './sign.js'
+export type { SignatureBlock } from './sign.js'
 import {
   bytesToBase64,
   base64ToBytes,

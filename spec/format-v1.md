@@ -29,6 +29,7 @@ All multi-byte integers are big-endian. All byte counts are in octets.
 
 ```
 encrypted_file := header || chunk_0 || chunk_1 || ... || chunk_n
+              || signature_block?      (optional, see § "Signature block")
 ```
 
 ### Header
@@ -297,6 +298,71 @@ decryption (the PQ shared secret is recovered from it via
 decapsulation) and therefore cannot be stored out-of-band. The full
 1664-byte `suite_payload` MUST be present inline in every PQ-hybrid
 file.
+
+## Signature block
+
+The signature block is an OPTIONAL trailing structure that carries a
+detached sender signature over `header_unauthenticated_bytes ||
+concat(per-chunk MAC tags)`. It provides *sender attribution*: a
+recipient who trusts a sender's public key can verify the file was
+produced by that sender. It does NOT add confidentiality or chunk
+integrity — those are provided by the per-suite AEAD and by
+`header_mac` regardless of whether a signature block is present.
+
+```
+signature_block := algorithm        (1 byte)  = signature algorithm identifier
+                || pubkey_len       (2 bytes) = uint16 BE, length of public_key
+                || public_key       (variable) = sender's verifying key
+                || signature_len    (2 bytes) = uint16 BE, length of signature
+                || signature        (variable) = detached signature bytes
+```
+
+`algorithm` is one of:
+
+| Value  | Algorithm     | Public key | Signature | Status   |
+| ------ | ------------- | ---------- | --------- | -------- |
+| `0x00` | (reserved)    | —          | —         | invalid  |
+| `0x01` | Ed25519       | 32 bytes   | 64 bytes  | defined  |
+| `0x02` | ML-DSA-65     | 1952 bytes | 3309 bytes | reserved (not yet implemented) |
+| `0x80` | (reserved, custom-algorithm range begins) | — | — | reserved |
+
+The message signed for `0x01 = Ed25519` is the byte string
+
+```
+signed_message := header_unauthenticated_bytes
+               || concat(chunk_0_mac, chunk_1_mac, ..., chunk_{n-1}_mac)
+```
+
+where `header_unauthenticated_bytes` is exactly the bytes covered by
+`header_mac` (i.e. everything in the header before the `header_mac`
+field itself), and each `chunk_i_mac` is the suite's AEAD authenticator
+tag for chunk `i`. For all suites defined in this version the AEAD tag
+is the trailing 16 bytes of the chunk's ciphertext field (AES-GCM-128
+and Poly1305 both append a 16-byte tag).
+
+The signature block is OPTIONAL. Implementations:
+
+- **Writers MAY** append a signature block. Writers MUST NOT emit more
+  than one. The block, if present, MUST appear immediately after the
+  final chunk's ciphertext field and MUST NOT be followed by any further
+  bytes.
+- **Readers MUST** treat a file with no bytes after the last chunk as
+  unsigned (signature absent). Readers MUST treat any trailing bytes as
+  a signature block and MUST reject the file if those bytes do not parse
+  as a well-formed block or are followed by trailing garbage.
+- **Readers SHOULD** expose the parsed block (algorithm, public key,
+  signature) to callers so an application-level identity policy can
+  decide whether the file is acceptable.
+- **Readers MAY** verify the signature against a caller-supplied public
+  key. A signature block whose `algorithm` is unknown to the reader is
+  treated as unverifiable; the reader returns the block to the caller
+  without raising and lets the application policy decide.
+
+A signature block does not weaken the format's existing security
+guarantees: an attacker who tampers with any byte covered by `header_mac`
+fails MAC verification under the content key, and an attacker who
+tampers with any chunk ciphertext fails per-chunk AEAD verification. The
+signature is a separate, application-level trust layer.
 
 ## Versioning policy
 

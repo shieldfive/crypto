@@ -70,7 +70,9 @@ test('stream encrypt: empty file produces decryptable header-only output', async
     { plaintextSize: 0, chunkSize: 1024 },
   )
   const ct = await drain(ciphertext)
-  const pt = await drain(decryptStreamAesGcmV1(streamFrom(ct), { contentKey }))
+  const pt = await drain(
+    decryptStreamAesGcmV1(streamFrom(ct), { contentKey }).plaintext,
+  )
   assert.equal(pt.length, 0)
 })
 
@@ -81,7 +83,9 @@ test('stream encrypt: single full chunk', async () => {
     { plaintextSize: plaintext.length, chunkSize: 1024 },
   )
   const ct = await drain(ciphertext)
-  const pt = await drain(decryptStreamAesGcmV1(streamFrom(ct), { contentKey }))
+  const pt = await drain(
+    decryptStreamAesGcmV1(streamFrom(ct), { contentKey }).plaintext,
+  )
   assert.ok(bytesEqual(plaintext, pt))
 })
 
@@ -92,7 +96,9 @@ test('stream encrypt: many chunks, partial final', async () => {
     { plaintextSize: plaintext.length, chunkSize: 4096 },
   )
   const ct = await drain(ciphertext)
-  const pt = await drain(decryptStreamAesGcmV1(streamFrom(ct), { contentKey }))
+  const pt = await drain(
+    decryptStreamAesGcmV1(streamFrom(ct), { contentKey }).plaintext,
+  )
   assert.ok(bytesEqual(plaintext, pt))
 })
 
@@ -104,7 +110,7 @@ test('stream encrypt: input fragmented into tiny pieces still produces correct c
   )
   const ct = await drain(ciphertext)
   const pt = await drain(
-    decryptStreamAesGcmV1(streamFrom(ct, 17), { contentKey }),
+    decryptStreamAesGcmV1(streamFrom(ct, 17), { contentKey }).plaintext,
   )
   assert.ok(bytesEqual(plaintext, pt))
 })
@@ -160,7 +166,9 @@ test('stream decrypt: detects truncation', async () => {
   // Drop the last chunk + length prefix
   const truncated = ct.slice(0, ct.length - (4 + 1024 + 16))
   await assert.rejects(() =>
-    drain(decryptStreamAesGcmV1(streamFrom(truncated), { contentKey })),
+    drain(
+      decryptStreamAesGcmV1(streamFrom(truncated), { contentKey }).plaintext,
+    ),
   )
 })
 
@@ -173,7 +181,7 @@ test('stream decrypt: detects per-chunk tampering', async () => {
   const ct = await drain(ciphertext)
   ct[ct.length - 50] ^= 0x01
   await assert.rejects(() =>
-    drain(decryptStreamAesGcmV1(streamFrom(ct), { contentKey })),
+    drain(decryptStreamAesGcmV1(streamFrom(ct), { contentKey }).plaintext),
   )
 })
 
@@ -184,7 +192,10 @@ test('stream decrypt: rejects wrong key', async () => {
   })
   const ct = await drain(ciphertext)
   await assert.rejects(() =>
-    drain(decryptStreamAesGcmV1(streamFrom(ct), { contentKey: randomBytes(32) })),
+    drain(
+      decryptStreamAesGcmV1(streamFrom(ct), { contentKey: randomBytes(32) })
+        .plaintext,
+    ),
   )
 })
 
@@ -196,7 +207,7 @@ test('stream decrypt: detects header tampering', async () => {
   const ct = await drain(ciphertext)
   ct[10] ^= 0x40 // file_id byte
   await assert.rejects(() =>
-    drain(decryptStreamAesGcmV1(streamFrom(ct), { contentKey })),
+    drain(decryptStreamAesGcmV1(streamFrom(ct), { contentKey }).plaintext),
   )
 })
 
@@ -205,7 +216,7 @@ test('stream decrypt: rejects empty input', async () => {
     drain(
       decryptStreamAesGcmV1(streamFrom(new Uint8Array(0)), {
         contentKey: randomBytes(32),
-      }),
+      }).plaintext,
     ),
   )
 })
@@ -221,7 +232,7 @@ test('stream decrypt: produces output progressively (not buffered to end)', asyn
   )
   const ct = await drain(ciphertext)
 
-  const transform = createAesGcmV1DecryptStream({ contentKey })
+  const { stream: transform } = createAesGcmV1DecryptStream({ contentKey })
   const writer = transform.writable.getWriter()
   const reader = transform.readable.getReader()
 

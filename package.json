@@ -1,6 +1,6 @@
 {
   "name": "@shieldfive/crypto",
-  "version": "1.0.0-alpha.9",
+  "version": "1.0.0-alpha.11",
   "description": "Client-side post-quantum hybrid encryption for cloud storage. The cryptographic core of ShieldFive.",
   "type": "module",
   "license": "Apache-2.0",
@@ -105,6 +105,7 @@
     }
   },
   "dependencies": {
+    "@noble/curves": "^2.2.0",
     "@noble/post-quantum": "^0.6.0"
   },
   "devDependencies": {
