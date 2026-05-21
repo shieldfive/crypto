@@ -36,6 +36,10 @@
       "types": "./dist/suites/aes-gcm-v1/api.d.ts",
       "default": "./dist/suites/aes-gcm-v1/api.js"
     },
+    "./aes-gcm-v2": {
+      "types": "./dist/suites/aes-gcm-v2/api.d.ts",
+      "default": "./dist/suites/aes-gcm-v2/api.js"
+    },
     "./xchacha-v1": {
       "types": "./dist/suites/xchacha-v1/api.d.ts",
       "default": "./dist/suites/xchacha-v1/api.js"
