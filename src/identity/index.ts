@@ -55,7 +55,6 @@ import { randomBytes } from '../internal/runtime.js'
 import { getSodium } from '../internal/sodium.js'
 
 const IDENTITY_BUNDLE_MAGIC = new Uint8Array([0x53, 0x46, 0x35, 0x49, 0x01]) // "SF5I" + version
-const IDENTITY_BUNDLE_VERSION = 0x01
 
 export interface PublicIdentityBundle {
   /** ML-KEM-1024 public key (1568 bytes) */

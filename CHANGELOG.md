@@ -5,6 +5,29 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.0.0-alpha.11 — 2026-05-21
+
+### Added
+
+- Cipher suite 0x04 `aes-gcm-v2`: 8-byte HKDF-derived nonce prefix
+  + 4-byte BE chunk counter. Widens the cross-file IV-collision
+  space from 2^32 to 2^64 while keeping the IV at 12 bytes. v1
+  (suite 0x01) stays decrypt-only on the umbrella export.
+- Optional sender-attribution signatures (`src/identity/sign.ts`).
+  Detached Ed25519 (alg 0x01) over
+  `header_unauthenticated_bytes || concat(chunk_macs)`, appended as
+  a trailing signature block. Legacy files without the block keep
+  decrypting unchanged; the streaming API returns
+  `{signature: null}` in that case. Algorithm 0x02 is reserved for
+  ML-DSA-65.
+
+### Notes
+
+- Default cipher suite is still PQ-hybrid
+  (`SUITE.PQ_HYBRID_XCHACHA_MLKEM1024_V1`). aes-gcm-v2 is opt-in
+  via the dedicated subpath import.
+- Wire format updates documented in `spec/format-v1.md`.
+
 ## [1.0.0-alpha.9] — 2026-05
 
 ### Documentation

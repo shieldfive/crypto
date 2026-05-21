@@ -27,7 +27,6 @@ import { uint64BE } from '../../src/internal/encoding.js'
 //   35..42 plaintextSize uint64BE (8)
 //   43..44 suitePayload.length uint16BE (2)
 //   45+    suitePayload
-const TOTAL_CHUNKS_OFFSET = 27
 const PLAINTEXT_SIZE_OFFSET = 35
 
 const VALID_INPUTS = {

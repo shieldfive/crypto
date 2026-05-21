@@ -158,7 +158,7 @@ test('xchacha-v1: detects splice across files', async () => {
 
 test('xchacha-v1: progress callbacks', async () => {
   const reports: number[] = []
-  const result = await encryptBlob({
+  await encryptBlob({
     blob: new Blob([randomBytes(8192) as Uint8Array<ArrayBuffer>]),
     chunkSize: 1024,
     onProgress: (p) => reports.push(p),

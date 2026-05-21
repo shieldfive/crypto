@@ -39,12 +39,6 @@ const VECTORS = JSON.parse(
   readFileSync(resolve(__dirname, 'vectors.json'), 'utf8'),
 )
 
-function fixedBytes(byte: number, length: number): Uint8Array {
-  const out = new Uint8Array(length)
-  out.fill(byte)
-  return out
-}
-
 async function seeded(label: string, length: number): Promise<Uint8Array> {
   return hkdfSha256({
     ikm: new TextEncoder().encode(label),

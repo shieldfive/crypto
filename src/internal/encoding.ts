@@ -26,7 +26,6 @@ export function bytesToBase64(bytes: Uint8Array): string {
     return btoa(binary)
   }
   // Node fallback. Uses Buffer; safe in any Node version.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   return Buffer.from(bytes).toString('base64')
 }
 

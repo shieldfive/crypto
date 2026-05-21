@@ -35,7 +35,6 @@ import {
 } from '../../internal/types.js'
 import {
   asBlobPart,
-  concatBytes,
   readUint32BE,
   uint32BE,
 } from '../../internal/encoding.js'

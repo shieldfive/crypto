@@ -14,7 +14,6 @@ import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
 import {
-  decryptV0,
   decryptV0ToBytes,
   looksLikeV0,
 } from '../../src/suites/aes-gcm-v0/api.js'
