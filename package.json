@@ -1,6 +1,6 @@
 {
   "name": "@shieldfive/crypto",
-  "version": "1.0.0-alpha.9",
+  "version": "1.0.0-alpha.10",
   "description": "Client-side post-quantum hybrid encryption for cloud storage. The cryptographic core of ShieldFive.",
   "type": "module",
   "license": "Apache-2.0",
@@ -35,6 +35,10 @@
     "./aes-gcm-v1": {
       "types": "./dist/suites/aes-gcm-v1/api.d.ts",
       "default": "./dist/suites/aes-gcm-v1/api.js"
+    },
+    "./aes-gcm-v2": {
+      "types": "./dist/suites/aes-gcm-v2/api.d.ts",
+      "default": "./dist/suites/aes-gcm-v2/api.js"
     },
     "./xchacha-v1": {
       "types": "./dist/suites/xchacha-v1/api.d.ts",

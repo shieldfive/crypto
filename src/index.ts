@@ -6,7 +6,8 @@
  * subpath instead of the bare module name:
  *
  *   import { encryptBlob, decryptBlob } from '@shieldfive/crypto/pq-hybrid-v1'
- *   import { encryptBlob, decryptBlob } from '@shieldfive/crypto/aes-gcm-v1'
+ *   import { encryptBlob, decryptBlob } from '@shieldfive/crypto/aes-gcm-v2'
+ *   import { decryptBlob } from '@shieldfive/crypto/aes-gcm-v1' // decrypt-only
  *   import { encryptBlob, decryptBlob } from '@shieldfive/crypto/xchacha-v1'
  *   import { decryptV0 } from '@shieldfive/crypto/legacy-v0'
  *
@@ -74,9 +75,22 @@ export {
 } from './internal/runtime.js'
 
 // ──────────────────────────────────────────────────────────────────────
-// Re-export suite namespaces for direct consumption
+// Re-export suite namespaces for direct consumption.
+// The aes-gcm encrypt path on the umbrella is v2 (0x04). v1 (0x01) is
+// exposed decrypt-only here because new files should never be written
+// with the narrow 4-byte nonce prefix. Callers that genuinely need to
+// re-encrypt as v1 (e.g. migration tooling) can still import from the
+// @shieldfive/crypto/aes-gcm-v1 subpath.
 // ──────────────────────────────────────────────────────────────────────
-export * as aesGcmV1 from './suites/aes-gcm-v1/api.js'
+import {
+  decryptBlob as aesGcmV1DecryptBlob,
+  decryptToBytes as aesGcmV1DecryptToBytes,
+} from './suites/aes-gcm-v1/api.js'
+export const aesGcmV1 = {
+  decryptBlob: aesGcmV1DecryptBlob,
+  decryptToBytes: aesGcmV1DecryptToBytes,
+}
+export * as aesGcmV2 from './suites/aes-gcm-v2/api.js'
 export * as xchachaV1 from './suites/xchacha-v1/api.js'
 export * as pqHybridV1 from './suites/pq-hybrid-v1/api.js'
 export * as legacyV0 from './suites/aes-gcm-v0/api.js'
@@ -91,12 +105,13 @@ export * as migrationV0 from './migration/v0-bridge.js'
 import { parseHeader, HeaderError } from './format/header.js'
 import { SUITE, type SuiteId } from './internal/types.js'
 import * as aes from './suites/aes-gcm-v1/api.js'
+import * as aesV2 from './suites/aes-gcm-v2/api.js'
 import * as xchacha from './suites/xchacha-v1/api.js'
 import * as pqHybrid from './suites/pq-hybrid-v1/api.js'
 
 export interface AutoDecryptOptions {
   blob: Blob
-  /** Used for AES-GCM-v1 and XChaCha-v1 (32-byte raw content key) */
+  /** Used for AES-GCM-v1/v2 and XChaCha-v1 (32-byte raw content key) */
   contentKey?: Uint8Array
   /** Required for PQ-hybrid: ML-KEM-1024 secret key (3168 bytes) */
   recipientSecretKey?: Uint8Array
@@ -157,6 +172,18 @@ export async function autoDecryptBlob(
         ...(options.onProgress ? { onProgress: options.onProgress } : {}),
       })
     }
+    case SUITE.AES_256_GCM_V2: {
+      if (!options.contentKey) {
+        throw new Error(
+          'autoDecryptBlob: contentKey required for aes-256-gcm-v2',
+        )
+      }
+      return aesV2.decryptBlob({
+        blob,
+        contentKey: options.contentKey,
+        ...(options.onProgress ? { onProgress: options.onProgress } : {}),
+      })
+    }
     case SUITE.XCHACHA20_POLY1305_V1: {
       if (!options.contentKey) {
         throw new Error(
@@ -191,7 +218,7 @@ export async function autoDecryptBlob(
 }
 
 /** Library version, also written into format documentation. */
-export const SHIELDFIVE_CRYPTO_VERSION = '1.0.0-alpha.9'
+export const SHIELDFIVE_CRYPTO_VERSION = '1.0.0-alpha.10'
 
 /** Default cipher suite for new files when not specified by the caller. */
 export const DEFAULT_SUITE = SUITE.PQ_HYBRID_XCHACHA_MLKEM1024_V1

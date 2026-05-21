@@ -17,6 +17,7 @@ export const SUITE = {
   AES_256_GCM_V1: 0x01,
   XCHACHA20_POLY1305_V1: 0x02,
   PQ_HYBRID_XCHACHA_MLKEM1024_V1: 0x03,
+  AES_256_GCM_V2: 0x04,
 } as const
 
 export type SuiteId = (typeof SUITE)[keyof typeof SUITE]
@@ -25,11 +26,13 @@ export type SuiteName =
   | 'aes-256-gcm-v1'
   | 'xchacha20-poly1305-v1'
   | 'pq-hybrid-xchacha-mlkem1024-v1'
+  | 'aes-256-gcm-v2'
 
 export const SUITE_NAMES: Record<SuiteId, SuiteName> = {
   [SUITE.AES_256_GCM_V1]: 'aes-256-gcm-v1',
   [SUITE.XCHACHA20_POLY1305_V1]: 'xchacha20-poly1305-v1',
   [SUITE.PQ_HYBRID_XCHACHA_MLKEM1024_V1]: 'pq-hybrid-xchacha-mlkem1024-v1',
+  [SUITE.AES_256_GCM_V2]: 'aes-256-gcm-v2',
 }
 
 /**
@@ -80,6 +83,7 @@ export const HKDF_INFO = Object.freeze({
   HEADER_MAC: 'shieldfive/v1/header-mac',
   AES_GCM_CHUNK_KEY: 'shieldfive/v1/aes-gcm/chunk-key',
   AES_GCM_NONCE_PREFIX: 'shieldfive/v1/aes-gcm/nonce-prefix',
+  AES_GCM_V2_NONCE_PREFIX: 'shieldfive/v1/aes-gcm-v2/nonce-prefix',
   XCHACHA_CHUNK_KEY: 'shieldfive/v1/xchacha/chunk-key',
   XCHACHA_NONCE_PREFIX: 'shieldfive/v1/xchacha/nonce-prefix',
   PQ_HYBRID_COMBINE: 'shieldfive/v1/pq-hybrid/combine',
