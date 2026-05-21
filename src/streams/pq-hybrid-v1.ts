@@ -27,7 +27,8 @@
  */
 
 import {
-  buildAuthenticatedHeader,
+  buildHeaderUnauthenticated,
+  deriveHeaderMacKey,
   HeaderError,
   parseHeader,
 } from '../format/header.js'
@@ -46,8 +47,22 @@ import {
   MAX_TOTAL_CHUNKS,
   SUITE,
 } from '../internal/types.js'
-import { readUint32BE, uint32BE } from '../internal/encoding.js'
+import { concatBytes, readUint32BE, uint32BE } from '../internal/encoding.js'
+import { hmacSha256 } from '../internal/hmac.js'
 import { randomBytes } from '../internal/runtime.js'
+import {
+  buildSignatureBlock,
+  deriveEd25519PublicKey,
+  ED25519_SECRET_KEY_LENGTH,
+  SIGNATURE_ALGO_ED25519,
+  signHeaderAndMacs,
+} from '../identity/sign.js'
+import {
+  type DecryptionMetadata,
+  finalizeSignatureMetadata,
+} from './aes-gcm-v1.js'
+
+export type { DecryptionMetadata, VerifiedSignature } from './aes-gcm-v1.js'
 
 const LENGTH_PREFIX_BYTES = 4
 
@@ -81,6 +96,13 @@ export interface PqHybridV1EncryptStreamOptions {
    * classical nonce).
    */
   suitePayload: Uint8Array
+  /**
+   * Optional 32-byte Ed25519 secret seed. When provided, the stream
+   * appends a signature block over `header_unauthenticated_bytes ||
+   * concat(chunk_macs)` after the final chunk. When omitted, no block
+   * is emitted and the file decrypts as unsigned (legacy behavior).
+   */
+  ed25519SecretKey?: Uint8Array
 }
 
 export interface PqHybridV1EncryptStreamResult {
@@ -153,33 +175,44 @@ export function createPqHybridV1EncryptStream(
     )
   }
 
+  const ed25519SecretKey = options.ed25519SecretKey
+  if (ed25519SecretKey && ed25519SecretKey.length !== ED25519_SECRET_KEY_LENGTH) {
+    throw new RangeError(
+      `encrypt stream: ed25519SecretKey must be ${ED25519_SECRET_KEY_LENGTH} bytes`,
+    )
+  }
+
   // State held across the lifetime of the stream:
   //   - pending plaintext buffer (collects until we have a full chunk)
   //   - chunk index counter
   //   - bytes consumed counter (for sanity check vs plaintextSize)
   //   - context (lazily initialized)
+  //   - unauthenticated header bytes (kept for signing)
+  //   - per-chunk MAC tags (last 16 bytes of each chunk ciphertext)
   let pending = new Uint8Array(0)
   let chunkIndex = 0
   let bytesConsumed = 0
   let contextPromise: ReturnType<typeof createChunkContext> | null = null
   let headerEmitted = false
+  let unauthenticatedHeader: Uint8Array | null = null
+  const chunkMacs: Uint8Array[] = []
 
   async function ensureHeader(
     controller: TransformStreamDefaultController<Uint8Array>,
   ): Promise<void> {
     if (headerEmitted) return
-    const header = await buildAuthenticatedHeader(
-      {
-        suite: SUITE.PQ_HYBRID_XCHACHA_MLKEM1024_V1,
-        fileId,
-        chunkSize,
-        totalChunks,
-        plaintextSize: options.plaintextSize,
-        suitePayload,
-      },
-      combinedKey,
-    )
-    controller.enqueue(header)
+    const unauth = buildHeaderUnauthenticated({
+      suite: SUITE.PQ_HYBRID_XCHACHA_MLKEM1024_V1,
+      fileId,
+      chunkSize,
+      totalChunks,
+      plaintextSize: options.plaintextSize,
+      suitePayload,
+    })
+    const macKey = await deriveHeaderMacKey(combinedKey, fileId)
+    const mac = await hmacSha256(macKey, unauth)
+    unauthenticatedHeader = unauth
+    controller.enqueue(concatBytes([unauth, mac]))
     headerEmitted = true
   }
 
@@ -194,6 +227,9 @@ export function createPqHybridV1EncryptStream(
     const ct = await encryptChunk(ctx, chunkIndex, plaintext)
     controller.enqueue(uint32BE(ct.length))
     controller.enqueue(ct)
+    if (ed25519SecretKey) {
+      chunkMacs.push(ct.slice(ct.length - PQ_HYBRID_V1_TAG_BYTES))
+    }
     chunkIndex += 1
   }
 
@@ -246,6 +282,28 @@ export function createPqHybridV1EncryptStream(
         controller.error(
           new RangeError('encrypt stream: residual bytes after final chunk'),
         )
+        return
+      }
+      if (ed25519SecretKey) {
+        if (!unauthenticatedHeader) {
+          controller.error(
+            new Error('encrypt stream: header not finalized before signing'),
+          )
+          return
+        }
+        const signature = signHeaderAndMacs({
+          ed25519SecretKey,
+          header: unauthenticatedHeader,
+          chunkMacs,
+        })
+        const publicKey = deriveEd25519PublicKey(ed25519SecretKey)
+        controller.enqueue(
+          buildSignatureBlock({
+            algorithm: SIGNATURE_ALGO_ED25519,
+            publicKey,
+            signature,
+          }),
+        )
       }
     },
   }
@@ -279,6 +337,12 @@ export type PqHybridV1DecryptStreamOptions =
       /** Classical envelope key (32 bytes). */
       envelopeKey: Uint8Array
       combinedKey?: undefined
+      /**
+       * If provided, a trailing signature block (if present) is verified
+       * against this Ed25519 public key. See `AesGcmV1DecryptStreamOptions`
+       * for the verification semantics — they are identical here.
+       */
+      expectedSignerPublicKey?: Uint8Array
     }
   | {
       /**
@@ -299,7 +363,14 @@ export type PqHybridV1DecryptStreamOptions =
       combinedKey: Uint8Array
       recipientSecretKey?: undefined
       envelopeKey?: undefined
+      /** See sibling variant. */
+      expectedSignerPublicKey?: Uint8Array
     }
+
+export interface PqHybridV1DecryptStreamResult {
+  stream: TransformStream<Uint8Array, Uint8Array>
+  metadata: Promise<DecryptionMetadata>
+}
 
 /**
  * Build a TransformStream that decrypts a v1 ciphertext stream produced
@@ -319,10 +390,20 @@ export type PqHybridV1DecryptStreamOptions =
  */
 export function createPqHybridV1DecryptStream(
   options: PqHybridV1DecryptStreamOptions,
-): TransformStream<Uint8Array, Uint8Array> {
+): PqHybridV1DecryptStreamResult {
   const combinedKeyOverride = options.combinedKey
   const recipientSecretKey = options.recipientSecretKey
   const envelopeKey = options.envelopeKey
+  const expectedSignerPublicKey = options.expectedSignerPublicKey
+
+  let resolveMetadata!: (m: DecryptionMetadata) => void
+  let rejectMetadata!: (err: unknown) => void
+  const metadata = new Promise<DecryptionMetadata>((resolve, reject) => {
+    resolveMetadata = resolve
+    rejectMetadata = reject
+  })
+  // See aes-gcm-v1.ts createAesGcmV1DecryptStream for rationale.
+  metadata.catch(() => {})
 
   if (combinedKeyOverride) {
     if (combinedKeyOverride.length !== 32) {
@@ -350,6 +431,7 @@ export function createPqHybridV1DecryptStream(
   let bytesEmitted = 0
   let nextCipherLen = -1
   let contextPromise: ReturnType<typeof createChunkContext> | null = null
+  const chunkMacs: Uint8Array[] = []
 
   function append(input: Uint8Array): void {
     const merged = new Uint8Array(buffer.length + input.length)
@@ -473,53 +555,64 @@ export function createPqHybridV1DecryptStream(
     const pt = await decryptChunk(ctx, chunkIndex, ctBytes)
     bytesEmitted += pt.length
     controller.enqueue(pt)
+    chunkMacs.push(ctBytes.slice(ctBytes.length - PQ_HYBRID_V1_TAG_BYTES))
     chunkIndex += 1
     return true
   }
 
-  return new TransformStream<Uint8Array, Uint8Array>({
-    async transform(chunk, controller) {
-      append(chunk)
-      try {
-        if (phase === 0) {
-          const ok = await tryParseHeader()
-          if (!ok) return
+  return {
+    stream: new TransformStream<Uint8Array, Uint8Array>({
+      async transform(chunk, controller) {
+        append(chunk)
+        try {
+          if (phase === 0) {
+            const ok = await tryParseHeader()
+            if (!ok) return
+          }
+          // Drain as many chunks as we have data for.
+          while (await tryEmitChunk(controller)) {
+            /* loop */
+          }
+        } catch (err) {
+          controller.error(err as Error)
+          rejectMetadata(err)
         }
-        // Drain as many chunks as we have data for.
-        while (await tryEmitChunk(controller)) {
-          /* loop */
+      },
+      async flush(controller) {
+        try {
+          if (phase === 0) {
+            throw new HeaderError('header_too_short')
+          }
+          // No header yet means truncated input.
+          if (!parsedHeader) {
+            throw new HeaderError('header_too_short')
+          }
+          // Try once more in case flush is called with everything queued.
+          while (await tryEmitChunk(controller)) {
+            /* loop */
+          }
+          if (chunkIndex !== parsedHeader.totalChunks) {
+            throw new HeaderError('chunk_truncated')
+          }
+          if (bytesEmitted !== parsedHeader.plaintextSize) {
+            throw new HeaderError('plaintext_size_mismatch')
+          }
+          const signatureResult = finalizeSignatureMetadata({
+            trailingBytes: buffer,
+            header: parsedHeader.unauthenticatedBytes,
+            chunkMacs,
+            expectedSignerPublicKey,
+          })
+          buffer = new Uint8Array(0)
+          resolveMetadata({ signature: signatureResult })
+        } catch (err) {
+          controller.error(err as Error)
+          rejectMetadata(err)
         }
-      } catch (err) {
-        controller.error(err as Error)
-      }
-    },
-    async flush(controller) {
-      try {
-        if (phase === 0) {
-          throw new HeaderError('header_too_short')
-        }
-        // No header yet means truncated input.
-        if (!parsedHeader) {
-          throw new HeaderError('header_too_short')
-        }
-        // Try once more in case flush is called with everything queued.
-        while (await tryEmitChunk(controller)) {
-          /* loop */
-        }
-        if (chunkIndex !== parsedHeader.totalChunks) {
-          throw new HeaderError('chunk_truncated')
-        }
-        if (bytesEmitted !== parsedHeader.plaintextSize) {
-          throw new HeaderError('plaintext_size_mismatch')
-        }
-        if (buffer.length !== 0) {
-          throw new HeaderError('trailing_bytes_after_last_chunk')
-        }
-      } catch (err) {
-        controller.error(err as Error)
-      }
-    },
-  })
+      },
+    }),
+    metadata,
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -537,6 +630,11 @@ export interface EncryptStreamPqHybridV1Options {
   chunkSize?: number
   /** Pre-existing 16-byte file_id, or generated if omitted. */
   fileId?: Uint8Array
+  /**
+   * Optional 32-byte Ed25519 secret seed for sender attribution. When
+   * provided, a signature block is appended after the final chunk.
+   */
+  ed25519SecretKey?: Uint8Array
 }
 
 /**
@@ -588,6 +686,9 @@ export async function encryptStreamPqHybridV1(
   if (options.chunkSize !== undefined) {
     streamOptions.chunkSize = options.chunkSize
   }
+  if (options.ed25519SecretKey !== undefined) {
+    streamOptions.ed25519SecretKey = options.ed25519SecretKey
+  }
   const { stream } = createPqHybridV1EncryptStream(streamOptions)
 
   return {
@@ -600,13 +701,22 @@ export async function encryptStreamPqHybridV1(
 
 /**
  * Pipe a ReadableStream<Uint8Array> through the PQ-hybrid-v1 decrypt
- * transform and return the resulting plaintext ReadableStream. See
+ * transform and return the resulting plaintext ReadableStream + a
+ * `metadata` Promise carrying the parsed signature block (or
+ * `signature: null` for unsigned / legacy files). See
  * {@link PqHybridV1DecryptStreamOptions} for the two key-input modes
  * (KEM secret + envelope vs. pre-derived combined key K).
  */
 export function decryptStreamPqHybridV1(
   source: ReadableStream<Uint8Array>,
   options: PqHybridV1DecryptStreamOptions,
-): ReadableStream<Uint8Array> {
-  return source.pipeThrough(createPqHybridV1DecryptStream(options))
+): {
+  plaintext: ReadableStream<Uint8Array>
+  metadata: Promise<DecryptionMetadata>
+} {
+  const { stream, metadata } = createPqHybridV1DecryptStream(options)
+  return {
+    plaintext: source.pipeThrough(stream),
+    metadata,
+  }
 }

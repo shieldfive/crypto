@@ -13,10 +13,21 @@ import test from 'node:test'
 import {
   createPqHybridV1DecryptStream,
   createPqHybridV1EncryptStream,
-  decryptStreamPqHybridV1,
+  decryptStreamPqHybridV1 as decryptStreamPqHybridV1Raw,
   encryptStreamPqHybridV1,
   type PqHybridV1DecryptStreamOptions,
 } from '../../src/streams/pq-hybrid-v1.js'
+
+// Existing tests pre-date the metadata-returning decrypt shape. This shim
+// adapts the new {plaintext, metadata} return so legacy roundtrip tests
+// don't need to be touched. New signature-aware tests live in
+// tests/integration/identitySigning.test.ts and use the raw factory.
+function decryptStreamPqHybridV1(
+  source: ReadableStream<Uint8Array>,
+  options: PqHybridV1DecryptStreamOptions,
+): ReadableStream<Uint8Array> {
+  return decryptStreamPqHybridV1Raw(source, options).plaintext
+}
 import * as pq from '../../src/suites/pq-hybrid-v1/api.js'
 import {
   PQ_HYBRID_V1_TAG_BYTES,
@@ -491,7 +502,7 @@ test('pq-hybrid stream decrypt: produces output progressively (not buffered to e
   })
   const ct = await drain(ciphertext)
 
-  const transform = createPqHybridV1DecryptStream({
+  const { stream: transform } = createPqHybridV1DecryptStream({
     recipientSecretKey: secretKey,
     envelopeKey,
   })
