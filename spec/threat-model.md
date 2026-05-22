@@ -63,9 +63,10 @@ v0 files have no chunk AAD, no `file_id` binding, and no truncation
 detection. Defense-in-depth for v0 files relies on the application's
 stored per-chunk SHA-1 hashes (`cipher_parts_sha1`), verified on
 download. Migration to v1 is required to gain the AEAD-bound integrity
-properties documented above. As of 2026-05-11, the v1 writer is
-enabled but most live data is still v0; migration policy and timeline
-are tracked separately.
+properties documented above. As of 2026-05-17, the v1 PQ-hybrid
+writer (Suite 0x03) is the production default for new uploads;
+existing v0 files remain readable indefinitely and in-place migration
+is tracked separately.
 
 ### A3 — Future quantum adversary
 
@@ -88,13 +89,10 @@ hybrid suite when migration is feasible.
 
 #### Current deployment status
 
-As of 2026-05-11, the production web client emits suite `0x01`
-(`aes-256-gcm-v1`) for new uploads. Suite `0x03`
-(`pq-hybrid-xchacha-mlkem1024-v1`) is implemented in the
-`@shieldfive/crypto` library but is not yet wired into the web worker;
-until Phase 3 ships, all newly-uploaded files are classical-only and
-are NOT protected against A3. This document will be updated when
-`0x03` becomes the default writer suite.
+As of 2026-05-17, the production web client emits Suite `0x03`
+(`pq-hybrid-xchacha-mlkem1024-v1`) for new uploads; files written
+under the previous default (v0, Suite `0x01`) remain readable
+indefinitely.
 
 ## Trust principals
 
@@ -199,9 +197,10 @@ a security claim about which product is "best" — each makes different
 tradeoffs — but it documents the design positions ShieldFive v1 takes
 deliberately.
 
-† Suite `0x03` is available in the crypto library (1.0.0-alpha.3) and
-is the format-v1 spec default; the production web client has not yet
-been updated to emit it. See § "Current deployment status" under A3.
+† As of 2026-05-17, the production web client emits Suite `0x03`
+(`pq-hybrid-xchacha-mlkem1024-v1`) for new uploads; files written
+under the previous default (v0, Suite `0x01`) remain readable
+indefinitely. See § "Current deployment status" under A3.
 
 ## Known limitations of v1
 
