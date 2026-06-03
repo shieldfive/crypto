@@ -109,14 +109,30 @@ by:
   expiry timestamp.
 - **No key reach.** The share endpoint never returns `rk`, parent
   folder keys, or other CSKs.
-- **Brute force.** Bcrypt-wrapped `share_password_hash` is rate
-  limited per-share, per-IP, and per-burst; lockout state is tracked
-  in `share_password_attempts` (Task 7).
+- **Brute force.** Verification is rate limited per-share, per-IP, and
+  per-burst; lockout state is tracked in `share_password_attempts`
+  (Task 7). The brute-force defense wraps the verifier comparison the
+  same way it previously wrapped the bcrypt comparison.
 
 The recipient is a trusted third party for the single file shared; the
 system makes no confidentiality guarantee against that recipient.
-Confidentiality against A1 is unaffected (the server doesn't have the
-share password in cleartext; it has only the bcrypt hash).
+
+New shares use a **client-derived blind verifier**: the client derives
+`verifier = Argon2id(share password, share_verifier_salt)` and the
+creator stores only `SHA-256(verifier)` (`share_verifier_hash`). At
+download the recipient re-derives the verifier locally and sends it; the
+server `SHA-256`s the received verifier and constant-time compares it to
+`share_verifier_hash`. The share password is never transmitted to the
+server, so the server never holds the cleartext password alongside
+`csk_pw_wrapped` and cannot decrypt the shared file. The verifier salt
+is independent of `csk_pw_salt`, and the key-wrapping path (`csk_pw_*`)
+is unchanged. Confidentiality against A1 is therefore unaffected (the
+server has only `share_verifier_hash`, never the password).
+
+The legacy bcrypt path (`share_password_hash`) is retained only for
+shares created before the blind verifier; those shares still send the
+cleartext password for the server-side bcrypt compare. New shares are
+always verifier mode.
 
 ## Out of scope
 
