@@ -95,9 +95,11 @@
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
     "lint": "eslint src tests",
+    "pretest": "npm run build",
     "test": "node --experimental-vm-modules --test --import tsx tests/**/*.test.ts",
     "test:unit": "node --experimental-vm-modules --test --import tsx tests/unit/*.test.ts",
     "test:integration": "node --experimental-vm-modules --test --import tsx tests/integration/*.test.ts",
+    "test:vectors": "node --experimental-vm-modules --test --import tsx tests/vectors/vectors.test.ts",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\""
   },
   "peerDependencies": {

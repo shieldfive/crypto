@@ -5,7 +5,7 @@
 > [ShieldFive](https://shieldfive.com), released as a standalone library.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-155%2F155-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-171%2F171-brightgreen.svg)](tests/)
 [![Status](https://img.shields.io/badge/status-alpha-orange.svg)](#status)
 
 ## Status & honest scope
@@ -17,7 +17,7 @@ treat this library as a serious work-in-progress rather than a finished
 product.
 
 The design choices documented in [`spec/`](spec/) are deliberate and
-reviewable. The implementation is covered by 155 passing tests including
+reviewable. The implementation is covered by 171 passing tests including
 truncation, reordering, splice, and tampering detection across all four
 suites. That is enough for internal dogfooding. It is **not** enough to
 claim "most secure crypto library" — that claim requires external review
@@ -165,7 +165,7 @@ The complete v1 wire format is documented in
 
 ```
 header := magic(5)           = "SF5\x01\x00"
-       || suite(1)            = 0x01 | 0x02 | 0x03
+       || suite(1)            = 0x01 | 0x02 | 0x03 | 0x04
        || flags(1)            = 0x00 (reserved)
        || file_id(16)         = random per-file
        || chunk_size(4)       = uint32 BE
@@ -190,6 +190,13 @@ application-layer hashes.
 | 0x01 | `aes-256-gcm-v1`                    |         | WebCrypto-only, hardware-accelerated   |
 | 0x02 | `xchacha20-poly1305-v1`             |         | libsodium, 192-bit nonces              |
 | 0x03 | `pq-hybrid-xchacha-mlkem1024-v1`    | ✅      | XChaCha20-Poly1305 + ML-KEM-1024 hybrid |
+| 0x04 | `aes-256-gcm-v2`                    |         | WebCrypto-only, 8-byte nonce prefix    |
+
+Suite `0x04` is the current AES-GCM write path: identical to `0x01` except
+the 12-byte GCM IV uses an 8-byte file-derived nonce prefix and a 4-byte
+counter (rather than 4 + 8), widening the cross-file IV-collision margin.
+`0x01` remains defined for reading files written before `0x04` existed.
+See [`spec/format-v1.md`](spec/format-v1.md) for the per-suite derivations.
 
 ML-KEM-1024 is FIPS 203 (NIST PQC standard, security level 5). Files
 encrypted with suite 0x03 remain confidential against an adversary who
@@ -237,7 +244,7 @@ Requires Node 20+.
 
 **Alpha.** The wire format is frozen for the v1 release, but the public
 TypeScript API may make small adjustments before 1.0.0 stable. Test
-coverage is comprehensive (155 tests, all four suites, all architectural
+coverage is comprehensive (171 tests, all four suites, all architectural
 guarantees verified). A formal third-party security audit is planned for
 the 1.0.0 stable milestone — until that audit lands, treat this library
 as a serious work-in-progress rather than a finished product.
@@ -250,7 +257,8 @@ crypto library; we chose it over MIT for that reason.
 ## Reporting vulnerabilities
 
 See [`SECURITY.md`](SECURITY.md). Coordinate with us at
-`security@shieldfive.com` (PGP key in SECURITY.md). 72-hour acknowledgement,
+`security@shieldfive.com` (see SECURITY.md for the encrypted-channel
+process). 72-hour acknowledgement,
 30-day target patch window for high-severity issues. Researchers acting
 in good faith are protected under the safe-harbor clause.
 
