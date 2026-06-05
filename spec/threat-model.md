@@ -251,7 +251,7 @@ These are intentional tradeoffs documented for transparency:
 ## Reporting
 
 Cryptographic vulnerabilities should be reported to
-`security@shieldfive.com` encrypted with the PGP key in `SECURITY.md`. We
-acknowledge within 72 hours and target a patch within 30 days for
-high-severity issues. Researchers acting in good faith are protected under
+`security@shieldfive.com`; see `SECURITY.md` for the encrypted-channel
+process. We acknowledge within 72 hours and target a patch within 30 days
+for high-severity issues. Researchers acting in good faith are protected under
 the safe-harbor clause in `SECURITY.md`.

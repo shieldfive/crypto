@@ -91,9 +91,11 @@ chunk_key        = HKDF(content_key, salt=file_id,
 
 nonce_prefix     = HKDF(file_id,
                         info="shieldfive/v1/<suite>/nonce-prefix",
-                        L = 4 (AES-GCM) or 16 (XChaCha))
+                        L = 4 (aes-gcm-v1), 8 (aes-gcm-v2), or 16 (xchacha))
 
-iv / nonce_i     = nonce_prefix || uint64_be(chunk_index)
+iv / nonce_i     = nonce_prefix || counter
+                   (counter = uint32_be(chunk_index) for aes-gcm-v2's
+                    8-byte prefix; uint64_be(chunk_index) otherwise)
 ```
 
 For the PQ-hybrid suite, `content_key` is replaced by the combined key
@@ -118,6 +120,7 @@ application MUST NOT reuse any of them for unrelated purposes:
 shieldfive/v1/header-mac
 shieldfive/v1/aes-gcm/chunk-key
 shieldfive/v1/aes-gcm/nonce-prefix
+shieldfive/v1/aes-gcm-v2/nonce-prefix
 shieldfive/v1/xchacha/chunk-key
 shieldfive/v1/xchacha/nonce-prefix
 shieldfive/v1/pq-hybrid/combine

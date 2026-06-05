@@ -60,6 +60,7 @@ future minor-version bumps that remain backward-compatible.
 | `0x01` | `aes-256-gcm-v1`                       | required |
 | `0x02` | `xchacha20-poly1305-v1`                | required |
 | `0x03` | `pq-hybrid-xchacha-mlkem1024-v1`       | default  |
+| `0x04` | `aes-256-gcm-v2`                       | required |
 | `0x80` | (reserved, custom-suite range begins)  | reserved |
 
 `flags` is reserved; readers MUST reject any header with a non-zero flags
@@ -93,8 +94,9 @@ header_mac_key := HKDF-SHA-256(
 ```
 
 For suites whose header MAC key is not derived from `suite_payload`
-(currently `0x01` aes-gcm-v1, `0x02` xchacha-v1), readers MUST verify
-`header_mac` before parsing `suite_payload` or any chunk. KEM suites
+(currently `0x01` aes-gcm-v1, `0x02` xchacha-v1, `0x04` aes-gcm-v2),
+readers MUST verify `header_mac` before parsing `suite_payload` or any
+chunk. KEM suites
 (currently `0x03` pq-hybrid-v1) verify `header_mac` after decapsulation
 per their suite-specific decryption flow; see § "`0x03` — pq-hybrid"
 below for the required ordering and security argument. A header_mac
@@ -298,6 +300,51 @@ decryption (the PQ shared secret is recovered from it via
 decapsulation) and therefore cannot be stored out-of-band. The full
 1664-byte `suite_payload` MUST be present inline in every PQ-hybrid
 file.
+
+### `0x04` — `aes-256-gcm-v2`
+
+```
+suite_payload := wrapped_key   (60 bytes) = AES-GCM-wrapped 32-byte content key
+              || wrap_iv       (12 bytes) = AES-GCM IV used for wrapping
+```
+
+`0x04` is a WebCrypto-only AEAD suite (no WASM dependency) that differs
+from `0x01` in exactly one respect: the split of the 12-byte AES-GCM IV.
+It is the suite new AES-GCM writes use; `0x01` remains defined so that
+files written before `0x04` existed stay readable.
+
+- `chunk_key(content_key, file_id)` =
+  `HKDF-SHA-256(ikm=content_key, salt=file_id, info="shieldfive/v1/aes-gcm/chunk-key", L=32)`
+
+  This is bit-for-bit identical to the `0x01` chunk-key derivation — same
+  HKDF `info` string (`shieldfive/v1/aes-gcm/chunk-key`), same inputs. A
+  `0x01` file and a `0x04` file sharing a `content_key` and `file_id`
+  derive the same chunk key. They never collide on AEAD inputs, because
+  the nonce-prefix derivation below uses a distinct `info` string, giving
+  the two suites disjoint `(prefix, counter)` spaces.
+
+- `chunk_nonce(file_id, i)` =
+  `HKDF-SHA-256(ikm=file_id, salt=zeros(32), info="shieldfive/v1/aes-gcm-v2/nonce-prefix", L=8)`
+  `|| uint32_be(i)`
+
+  The 12-byte GCM IV is an 8-byte file-derived prefix followed by a 4-byte
+  big-endian chunk counter — the inverse of `0x01`'s split, which is a
+  4-byte prefix and an 8-byte counter. Widening the prefix shrinks the
+  cross-file `(prefix, counter)` collision space (for two files that reuse
+  a `content_key` — which never happens under correct use, but defense in
+  depth) from 2^32 to 2^64. The trade is a per-file chunk ceiling of 2^32
+  chunks rather than 2^64; this is far above the format's
+  `MAX_TOTAL_CHUNKS` bound (1e9), so it is not a practical constraint.
+  Readers MUST reject a `0x04` file whose `total_chunks` exceeds 2^32. The
+  salt is the RFC 5869 absent-salt zero-fill (32 zero bytes), identical to
+  the `0x01` and `0x02` suites.
+
+The wrapped-content-key field and the all-zero `suite_payload` convention
+for out-of-band key storage are identical to `0x01`: the field is a fixed
+72 bytes (60-byte `wrapped_key` + 12-byte `wrap_iv`), zero-filled when the
+wrapped key is stored out-of-band (e.g. in the ShieldFive vault database).
+Readers MUST accept all-zero `suite_payload` bytes in that case and obtain
+the wrapped key from the out-of-band channel.
 
 ## Signature block
 
