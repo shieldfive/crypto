@@ -30,13 +30,18 @@
 //   npm install @shieldfive/crypto@1.0.0-alpha.11 libsodium-wrappers-sumo
 //
 // Outputs:
-//   - If --output is a directory: writes <output>/<decrypted-filename>
-//   - Otherwise: writes the literal <output> path
-//   - Falls back to <file-id>.bin if filename decryption fails
+//   - --output is treated as a DIRECTORY by default (the recipe uses
+//     `--output ./decrypted`): it is created with `mkdir -p` and the plaintext
+//     is written to <output>/<decrypted-filename>.
+//   - If --output names an existing file, or its final path segment carries a
+//     file extension (e.g. ./out/report.pdf), the plaintext is written to that
+//     literal path instead (single-file mode).
+//   - Falls back to <file-id>.bin if the filename cannot be decrypted.
 
 import { readFile, writeFile, stat, mkdir } from 'node:fs/promises'
 import { webcrypto } from 'node:crypto'
-import { resolve, join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { resolve, join, dirname, extname } from 'node:path'
 
 import sodium from 'libsodium-wrappers-sumo'
 import {
@@ -54,7 +59,7 @@ const subtle = webcrypto.subtle
 // Arg parsing
 // ───────────────────────────────────────────────────────────────────────────
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const args = {}
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i]
@@ -120,10 +125,11 @@ async function deriveUserKey({ password, salt, kdf, iterations, argon2Preset }) 
   throw new Error(`Unsupported vault KDF: ${kdf}`)
 }
 
-async function aesGcmDecrypt(key, iv, ciphertext) {
-  return new Uint8Array(
-    await subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext),
-  )
+async function aesGcmDecrypt(key, iv, ciphertext, additionalData) {
+  const params = additionalData
+    ? { name: 'AES-GCM', iv, additionalData }
+    : { name: 'AES-GCM', iv }
+  return new Uint8Array(await subtle.decrypt(params, key, ciphertext))
 }
 
 async function importAesKey(rawKey32) {
@@ -161,7 +167,7 @@ async function unwrapRootKey({ vault, password, recoveryKey }) {
 // parent's key. Root-level folders' fk is wrapped under rootKey.
 // ───────────────────────────────────────────────────────────────────────────
 
-async function deriveFolderKey({ folderId, folders, rootKey }) {
+export async function deriveFolderKey({ folderId, folders, rootKey }) {
   if (!folderId) return rootKey
   const ancestors = []
   let cursor = folderId
@@ -189,11 +195,47 @@ async function deriveFolderKey({ folderId, folders, rootKey }) {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Filename decryption (the v3 SHA-256 and v4 Argon2id metadata paths the
-// ShieldFive web client uses for encrypted filenames)
+// Filename decryption — mirrors utils/metadataClient.ts in the web client.
+//
+// The encrypted name is JSON with a version byte:
+//   v3        legacy: AES-GCM key = SHA-256(secret), no salt, no AAD.
+//   v4        strong: Argon2id(secret, salt) → AES-GCM key. No AAD.
+//   v6        AAD-bound: same wire shape as v4, but the AES-GCM tag is computed
+//             over additionalData = the row UUID bytes. Decrypt MUST pass the
+//             same UUID or the tag fails (this is what binds a name to its row).
+//
+// `secret` is bytesToBase64(parentKey) — byte-for-byte the SAME base64 string
+// the web client feeds to crypto_pwhash. There, the filename secret is
+// `file.folder_id ? getFolderKey(file.folder_id) : rootKey`; getFolderKey() and
+// the rootKey are unwrapKeyB64's / keyring's standard-base64 of the raw
+// folder/root key bytes, and `parentKey` here is exactly those raw bytes.
+// Standard base64 (btoa / Buffer 'base64') on both sides → the strings match.
 // ───────────────────────────────────────────────────────────────────────────
 
-async function decryptFilename({ encryptedJson, parentKey }) {
+// The web client records the Argon2id strength it encrypted with in the `kdf`
+// field ("interactive" on mobile, "moderate" on desktop). Try the recorded
+// level first, then fall back to the other — mirrors metadataClient's
+// getKdfLevelsToTry. When `kdf` is absent (older blobs), use the web client's
+// desktop default order: MODERATE then INTERACTIVE.
+function argon2LevelsToTry(preferred) {
+  if (preferred === 'interactive') return ['interactive', 'moderate']
+  if (preferred === 'moderate') return ['moderate', 'interactive']
+  return ['moderate', 'interactive']
+}
+
+function opsMemForLevel(level) {
+  return level === 'interactive'
+    ? {
+        ops: sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
+        mem: sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE,
+      }
+    : {
+        ops: sodium.crypto_pwhash_OPSLIMIT_MODERATE,
+        mem: sodium.crypto_pwhash_MEMLIMIT_MODERATE,
+      }
+}
+
+export async function decryptFilename({ encryptedJson, parentKey, rowId = null }) {
   let parsed
   try {
     parsed = JSON.parse(encryptedJson)
@@ -202,28 +244,56 @@ async function decryptFilename({ encryptedJson, parentKey }) {
   }
   if (!parsed || typeof parsed !== 'object') return null
 
-  if (parsed.v === 4) {
+  if (parsed.v === 4 || parsed.v === 6) {
     await sodium.ready
+    if (parsed.v === 6 && !rowId) {
+      throw new Error(
+        'v6 (AAD-bound) filename requires the file row id as AES-GCM AAD',
+      )
+    }
     const salt = base64ToBytes(parsed.salt)
     const secret = bytesToBase64(parentKey)
-    // Web client always uses INTERACTIVE for cross-device compatibility.
-    const keyBytes = sodium.crypto_pwhash(
-      32,
-      secret,
-      salt,
-      sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
-      sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE,
-      sodium.crypto_pwhash_ALG_ARGON2ID13,
-    )
-    const key = await importAesKey(keyBytes)
+    const additionalData =
+      parsed.v === 6 ? new TextEncoder().encode(rowId) : undefined
     const ct = base64ToBytes(parsed.ct)
     const tag = base64ToBytes(parsed.tag)
     const iv = base64ToBytes(parsed.iv)
     const combined = new Uint8Array(ct.length + tag.length)
     combined.set(ct, 0)
     combined.set(tag, ct.length)
-    const plaintext = await aesGcmDecrypt(key, iv, combined)
-    return new TextDecoder().decode(plaintext)
+
+    const levels = argon2LevelsToTry(parsed.kdf)
+    let lastErr = null
+    for (const level of levels) {
+      let keyBytes
+      try {
+        const { ops, mem } = opsMemForLevel(level)
+        keyBytes = sodium.crypto_pwhash(
+          32,
+          secret,
+          salt,
+          ops,
+          mem,
+          sodium.crypto_pwhash_ALG_ARGON2ID13,
+        )
+      } catch (err) {
+        lastErr = err
+        continue
+      }
+      try {
+        const key = await importAesKey(keyBytes)
+        const plaintext = await aesGcmDecrypt(key, iv, combined, additionalData)
+        return new TextDecoder().decode(plaintext)
+      } catch (err) {
+        lastErr = err
+      }
+    }
+    throw new Error(
+      `filename decryption failed for v${parsed.v} after trying Argon2id ` +
+        `[${levels.join(', ')}]` +
+        (parsed.v === 6 ? ' (AAD = file row id)' : '') +
+        `: ${lastErr?.message ?? lastErr}`,
+    )
   }
 
   if (parsed.v === 3) {
@@ -239,10 +309,17 @@ async function decryptFilename({ encryptedJson, parentKey }) {
     const combined = new Uint8Array(ct.length + tag.length)
     combined.set(ct, 0)
     combined.set(tag, ct.length)
-    const plaintext = await aesGcmDecrypt(key, iv, combined)
-    return new TextDecoder().decode(plaintext)
+    try {
+      const plaintext = await aesGcmDecrypt(key, iv, combined)
+      return new TextDecoder().decode(plaintext)
+    } catch (err) {
+      throw new Error(
+        `legacy v3 filename decryption failed: ${err?.message ?? err}`,
+      )
+    }
   }
 
+  // Unrecognized metadata version — caller falls back to <file-id>.bin.
   return null
 }
 
@@ -292,19 +369,44 @@ async function decryptBlob({ blob, file, csk, rootKey }) {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Main
+// Output handling. --output is a directory by default (the recipe writes
+// `--output ./decrypted`): create it and write <output>/<decrypted-name>.
+// Single-file mode kicks in only when --output is an existing file or its
+// final segment carries a file extension. Returns the resolved file path.
 // ───────────────────────────────────────────────────────────────────────────
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2))
-  const bundleDir = resolve(requireArg(args, 'bundle'))
-  const fileId = requireArg(args, 'file-id')
-  const output = resolve(requireArg(args, 'output'))
-  const password = args.password ?? null
-  const recoveryKey = args['recovery-key'] ?? null
+export async function resolveOutputPath(output, safeName) {
+  let treatAsDirectory
+  try {
+    treatAsDirectory = (await stat(output)).isDirectory()
+  } catch {
+    // Doesn't exist yet. Default to directory behavior (the docs describe
+    // --output as a directory); only treat it as a single file when the final
+    // path segment carries a file extension (e.g. ./out/report.pdf).
+    treatAsDirectory = extname(output) === ''
+  }
+  if (treatAsDirectory) {
+    await mkdir(output, { recursive: true })
+    return join(output, safeName)
+  }
+  await mkdir(dirname(output), { recursive: true })
+  return output
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Core: decrypt one file from a bundle and write the plaintext. Returns
+// details so callers (CLI / tests) can report or assert on the result.
+// ───────────────────────────────────────────────────────────────────────────
+
+export async function run({
+  bundleDir,
+  fileId,
+  output,
+  password = null,
+  recoveryKey = null,
+}) {
   if (!password && !recoveryKey) {
-    console.error('Provide either --password or --recovery-key')
-    process.exit(2)
+    throw new Error('Provide either a password or a recovery key')
   }
 
   const vault = JSON.parse(await readFile(join(bundleDir, 'vault.json'), 'utf8'))
@@ -345,11 +447,19 @@ async function main() {
     base64ToBytes(file.csk_wrapped),
   )
 
-  // Decrypt the encrypted filename.
-  const plaintextName = await decryptFilename({
-    encryptedJson: file.name,
-    parentKey,
-  }).catch(() => null)
+  // Decrypt the encrypted filename. Don't swallow the failure — capture the
+  // real error so the caller can surface why a fallback name was used.
+  let plaintextName = null
+  let nameError = null
+  try {
+    plaintextName = await decryptFilename({
+      encryptedJson: file.name,
+      parentKey,
+      rowId: file.id,
+    })
+  } catch (err) {
+    nameError = err
+  }
   const safeName = plaintextName?.replace(/[/\\]/g, '_') || `${fileId}.bin`
 
   // Load the encrypted blob.
@@ -360,26 +470,66 @@ async function main() {
   const decrypted = await decryptBlob({ blob, file, csk, rootKey })
   const decryptedBytes = new Uint8Array(await decrypted.arrayBuffer())
 
-  // Resolve output path: directory → join with filename; otherwise literal.
-  let outPath = output
-  try {
-    const s = await stat(output)
-    if (s.isDirectory()) outPath = join(output, safeName)
-  } catch {
-    // output doesn't exist yet — use as-is. mkdir its parent.
-    await mkdir(dirname(output), { recursive: true })
-  }
+  const outPath = await resolveOutputPath(resolve(output), safeName)
   await writeFile(outPath, decryptedBytes)
 
-  console.log(`Decrypted ${fileId} → ${outPath} (${decryptedBytes.length} bytes)`)
-  if (!plaintextName) {
+  return {
+    outPath,
+    byteLength: decryptedBytes.length,
+    plaintextName,
+    safeName,
+    nameError,
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// CLI entry point
+// ───────────────────────────────────────────────────────────────────────────
+
+export async function main() {
+  const args = parseArgs(process.argv.slice(2))
+  const bundleDir = resolve(requireArg(args, 'bundle'))
+  const fileId = requireArg(args, 'file-id')
+  const output = requireArg(args, 'output')
+  const password = args.password ?? null
+  const recoveryKey = args['recovery-key'] ?? null
+  if (!password && !recoveryKey) {
+    console.error('Provide either --password or --recovery-key')
+    process.exit(2)
+  }
+
+  const result = await run({ bundleDir, fileId, output, password, recoveryKey })
+
+  console.log(
+    `Decrypted ${fileId} → ${result.outPath} (${result.byteLength} bytes)`,
+  )
+  if (!result.plaintextName) {
     console.warn(
-      'Filename could not be decrypted; wrote with fallback name. Ensure parent folder ancestry in folders.json is intact.',
+      `Filename could not be decrypted; wrote with fallback name ` +
+        `${result.safeName}.` +
+        (result.nameError ? ` Reason: ${result.nameError.message}` : '') +
+        ` The encrypted name may use an unsupported metadata format, or the ` +
+        `parent key / Argon2id level did not match.`,
     )
   }
 }
 
-main().catch((err) => {
-  console.error('decrypt-one failed:', err?.message ?? err)
-  process.exit(1)
-})
+// Only run main() when invoked directly (`node decrypt-one.mjs ...`), so the
+// module can be imported by tests without executing the CLI.
+const invokedDirectly = (() => {
+  try {
+    return (
+      !!process.argv[1] &&
+      resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+    )
+  } catch {
+    return false
+  }
+})()
+
+if (invokedDirectly) {
+  main().catch((err) => {
+    console.error('decrypt-one failed:', err?.message ?? err)
+    process.exit(1)
+  })
+}
