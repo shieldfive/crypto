@@ -5,6 +5,18 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.0.0-alpha.13 — 2026-06-09
+
+### Fixed
+
+- `SHIELDFIVE_CRYPTO_VERSION` now reports the actual package version
+  (it was pinned at `1.0.0-alpha.11`). The constant is informational
+  only — it is never written into file output or any test vector.
+- Corrected a backwards source comment in the `aes-gcm-v2` suite: the
+  cross-file nonce-prefix space *widens* from 2^32 to 2^64 (the comment
+  previously said "shrinks"). No behavior change — the README and
+  CHANGELOG already described it correctly as widening.
+
 ## 1.0.0-alpha.12 — 2026-06-09
 
 ### Documentation
