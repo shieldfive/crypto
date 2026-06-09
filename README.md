@@ -151,9 +151,11 @@ ML-KEM-1024 secret for Suite 0x03 files deterministically from
 the root key (per `spec/key-derivation.md`), and feeds each blob
 into `autoDecryptBlob` here.
 
-The recipe and the script live in the web repository so that the
-documented version stays in lock-step with the API surface; this
-library is the decryption primitive the script depends on. If
+The recipe lives at [shieldfive.com/export](https://shieldfive.com/export)
+and the script ships in this repository as
+[`examples/decrypt-one.mjs`](examples/decrypt-one.mjs), kept in
+lock-step with the API surface; this library is the decryption
+primitive the script depends on. If
 you want to reproduce the path from first principles (with no
 ShieldFive code in the loop), `spec/format-v1.md` and
 `spec/key-derivation.md` together describe everything needed.
