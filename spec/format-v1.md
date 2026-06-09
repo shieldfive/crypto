@@ -214,9 +214,17 @@ wrapped key from the out-of-band channel. The field length is fixed at
 
 ```
 suite_payload := mlkem_ciphertext  (1568 bytes) = ML-KEM-1024 ciphertext
-              || classical_wrapped (72 bytes)   = secretbox-wrapped classical share
+              || classical_wrapped (72 bytes)   = 48-byte secretbox-wrapped
+                                                   classical share || 24-byte
+                                                   reserved pad
               || classical_nonce   (24 bytes)   = secretbox nonce for classical wrap
 ```
+
+`classical_wrapped` is a fixed 72 bytes: the first 48 are the
+XSalsa20-Poly1305 secretbox of the 32-byte classical share, and the
+trailing 24 bytes are a reserved pad that MUST be all-zero. Readers MUST
+reject a suite payload whose reserved pad is non-zero, so the field
+cannot be used as a malleable, unauthenticated side channel.
 
 The recipient holds:
 
@@ -233,10 +241,25 @@ Encryption:
 3. Combined content key `K = HKDF-SHA-256(ikm = S_c || S_pq, salt = file_id,
    info = "shieldfive/v1/pq-hybrid/combine", L = 32)`.
 4. Sender wraps `S_c` with `K_c` using XSalsa20-Poly1305 secretbox to
-   produce `classical_wrapped`. (The PQ share is recovered from
-   `mlkem_ciphertext` via decapsulation; only the classical share needs
-   wrapping.)
-5. Subsequent chunks use the XChaCha20-Poly1305 chunk format with `K`.
+   produce the 48-byte secretbox, then left-pads it into the 72-byte
+   `classical_wrapped` field with a 24-byte all-zero reserved pad. (The PQ
+   share is recovered from `mlkem_ciphertext` via decapsulation; only the
+   classical share needs wrapping.)
+5. Subsequent chunks use the XChaCha20-Poly1305 chunk format with `K`. The
+   chunk-key and nonce-prefix derivations are identical to the `0x02`
+   XChaCha suite's, with `K` in the role of the content key. See
+   `spec/key-derivation.md` for why reusing those labels is safe here.
+
+> **Planned hardening — suite-id binding (audit M5, future suite version).**
+> The `0x03` chunk-key / nonce-prefix derivations currently reuse the `0x02`
+> XChaCha HKDF labels and do not fold the suite id into the IKM. This is
+> **not exploitable**: the header MAC authenticates the suite byte, so a
+> `0x02` and a `0x03` file are never interchangeable in practice. The
+> `0x03` derivation is intentionally left **unchanged** here — production
+> `cipher_version-3` files already exist and depend on it, and altering it
+> would render them undecryptable. A future suite version (a new suite id,
+> not `0x03`) will additionally bind the suite id into the chunk-key
+> derivation; this document will be updated when that suite is defined.
 
 Decryption:
 
@@ -300,6 +323,63 @@ decryption (the PQ shared secret is recovered from it via
 decapsulation) and therefore cannot be stored out-of-band. The full
 1664-byte `suite_payload` MUST be present inline in every PQ-hybrid
 file.
+
+#### Share bundle (re-encrypting `K` to another recipient)
+
+Sharing a `0x03` file with an additional recipient does not re-encrypt the
+chunks. The owner recovers the file's combined key `K` and produces a
+per-recipient *share bundle* that re-wraps `K` to the recipient's ML-KEM
+public key + envelope key. The share bundle is an application-layer record
+(it is not part of the on-disk file), but its wire format is specified here
+because it carries `0x03` key material. It carries its own magic and version
+byte (`magic`, below) — distinct from the `SF5` file magic — so the hardened
+format is unambiguously distinguishable from the earlier unversioned one.
+
+```
+share_bundle := magic              (5 bytes)   = "SF5S" (0x53 46 35 53) || version (0x02)
+             || pq_len             (4 bytes)   = uint32 BE, length of pq_payload (= 1664)
+             || pq_payload         (1664 bytes) = a 0x03 suite_payload encapsulated to the recipient
+             || wrap_nonce         (24 bytes)   = XChaCha20-Poly1305 nonce
+             || wrapped_key        (48 bytes)  = AEAD(K) = 32-byte K + 16-byte tag
+```
+
+Construction:
+
+1. The owner encapsulates to the recipient (ML-KEM + classical wrap under
+   the recipient's envelope key), yielding `pq_payload` and a transport
+   secret `T` (the `0x03` combined key for the recipient, derived under
+   `info="shieldfive/v1/pq-hybrid/combine"`).
+2. The wrapping key is domain-separated from `T` — it is NOT `T` directly,
+   so a share key can never equal a file's combined key:
+
+   ```
+   share_transport_key = HKDF(ikm=T, salt=file_id,
+                              info="shieldfive/v1/share-transport", L=32)
+   ```
+3. `K` is wrapped with XChaCha20-Poly1305 under `share_transport_key`, with
+   the AAD authenticating the WHOLE bundle prefix — including the magic and
+   version — so neither the version marker nor any PQ material can be
+   substituted, stripped, or downgraded:
+
+   ```
+   aad         = magic || uint32_be(pq_len) || pq_payload || wrap_nonce
+   wrapped_key = XChaCha20-Poly1305-Encrypt(key=share_transport_key,
+                     nonce=wrap_nonce, aad=aad, plaintext=K)
+   ```
+
+The recipient reverses this: verify `magic` (rejecting any bundle without
+the `"SF5S"` + version-2 prefix), parse the bundle (rejecting a non-zero
+reserved pad in `pq_payload`), decapsulate to recover `T`, derive
+`share_transport_key`, reconstruct `aad`, and AEAD-open `wrapped_key`. Any
+modification to `magic`, `pq_len`, `pq_payload`, or `wrap_nonce` breaks the
+tag.
+
+> **Wire-format change (alpha):** earlier alpha builds emitted an
+> *unversioned* bundle (no magic): the wrapping key was derived directly
+> from `T` (reusing the file-combiner label) and `K` was wrapped with an
+> XSalsa20-Poly1305 secretbox that authenticated only `K` (no AAD over
+> `pq_payload`). Such bundles are rejected by the magic check and must be
+> re-issued. No real shares exist pre-launch, so this is a clean break.
 
 ### `0x04` — `aes-256-gcm-v2`
 

@@ -88,6 +88,11 @@ export const HKDF_INFO = Object.freeze({
   XCHACHA_NONCE_PREFIX: 'shieldfive/v1/xchacha/nonce-prefix',
   PQ_HYBRID_COMBINE: 'shieldfive/v1/pq-hybrid/combine',
   ML_KEM_1024_SEED: 'shieldfive/v1/pq-hybrid/ml-kem-1024-seed',
+  // Re-encrypting a file's combined key to a share recipient wraps it under a
+  // transport key derived with THIS label, distinct from the file-combiner
+  // label above, so a share transport key is never equal to a file's
+  // combined key for the same (recipient, envelope, file_id).
+  SHARE_TRANSPORT: 'shieldfive/v1/share-transport',
   ARGON2ID_SALT_COMPRESSION: 'shieldfive/v1/argon2id/salt-compression',
 })
 

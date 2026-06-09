@@ -111,6 +111,18 @@ file-bound HKDF output `K`. Both are 32 bytes of uniformly random or
 pseudorandom material per file; cross-suite output collision
 probability is `2^-256`.
 
+> **Planned hardening — suite-id binding (audit M5, future suite version).**
+> The reuse above is safe but implicit: it relies on the `content_key` /`K`
+> input spaces being disjoint rather than binding the suite id directly into
+> the derivation. This is **not exploitable** in the current format — the
+> header MAC authenticates the suite byte, so a `0x02` and a `0x03` file are
+> never interchangeable. The `0x03` derivation is therefore left
+> **unchanged**: production `cipher_version-3` files already depend on it,
+> and changing the labels would make them undecryptable. A future suite
+> version (a new suite id, not `0x03`) will fold the suite id into the
+> chunk-key / nonce-prefix IKM and use dedicated `pq-hybrid` labels; this
+> section will be updated when that suite is defined.
+
 ## Forbidden cross-context usage
 
 These domain strings are consumed by the crypto layer. The host
@@ -125,6 +137,7 @@ shieldfive/v1/xchacha/chunk-key
 shieldfive/v1/xchacha/nonce-prefix
 shieldfive/v1/pq-hybrid/combine
 shieldfive/v1/pq-hybrid/ml-kem-1024-seed
+shieldfive/v1/share-transport
 shieldfive/v1/argon2id/salt-compression
 ```
 
