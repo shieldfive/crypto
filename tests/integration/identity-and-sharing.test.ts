@@ -22,9 +22,26 @@ import {
   openShareAsRecipient,
   type PublicIdentityBundle,
 } from '../../src/identity/index.js'
-import { ML_KEM_1024_PUBLIC_KEY_BYTES } from '../../src/suites/pq-hybrid-v1/index.js'
+import {
+  decapsulateFromHeader,
+  encapsulateForRecipient,
+  parsePqHybridV1SuitePayload,
+  ML_KEM_1024_CIPHERTEXT_BYTES,
+  ML_KEM_1024_PUBLIC_KEY_BYTES,
+} from '../../src/suites/pq-hybrid-v1/index.js'
 import * as pqHybrid from '../../src/suites/pq-hybrid-v1/api.js'
 import { randomBytes } from '../../src/internal/runtime.js'
+import { readUint32BE } from '../../src/internal/encoding.js'
+import { getSodium } from '../../src/internal/sodium.js'
+
+// Offset of the first reserved-pad byte inside the 1664-byte pq-hybrid suite
+// payload: after the 1568-byte ML-KEM ciphertext and the 48-byte secretbox.
+const RESERVED_PAD_OFFSET_IN_PAYLOAD = ML_KEM_1024_CIPHERTEXT_BYTES + 48
+
+// Share bundle layout: 5-byte magic ("SF5S" + version) || 4-byte pq_len || ...
+const SHARE_BUNDLE_MAGIC_LEN = 5
+const SHARE_BUNDLE_PQLEN_OFFSET = SHARE_BUNDLE_MAGIC_LEN // pq_len follows the magic
+const SHARE_BUNDLE_PAYLOAD_OFFSET = SHARE_BUNDLE_MAGIC_LEN + 4 // pq_payload follows pq_len
 
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false
@@ -277,4 +294,245 @@ test('share: full end-to-end — recipient decrypts the actual file', async () =
     envelopeKey: ownerEnvelope,
   })
   assert.ok(bytesEqual(plaintext, reDecrypted))
+})
+
+// ──────────────────────────────────────────────────────────────────────
+// Audit H2 + M6 hardening
+// ──────────────────────────────────────────────────────────────────────
+
+// M6: the 24-byte reserved pad in classical_wrapped MUST be zero. Before the
+// fix the parser ignored it entirely, so a non-zero pad parsed cleanly.
+test('pq-hybrid-v1: parser rejects a non-zero reserved classical_wrapped pad (M6)', async () => {
+  const recipient = await createIdentity({ userId: 'recipient' })
+  const { suitePayload } = await encapsulateForRecipient({
+    recipientPublicKey: recipient.publicBundle.mlKemPublicKey,
+    envelopeKey: randomBytes(32),
+    fileId: randomBytes(16),
+  })
+
+  // A freshly built payload has an all-zero pad and parses fine.
+  assert.doesNotThrow(() => parsePqHybridV1SuitePayload(suitePayload))
+
+  const tampered = suitePayload.slice()
+  tampered[RESERVED_PAD_OFFSET_IN_PAYLOAD] = 0x01 // flip a reserved-pad byte
+  assert.throws(
+    () => parsePqHybridV1SuitePayload(tampered),
+    /reserved classical_wrapped pad must be zero/,
+  )
+})
+
+// H2 (whole-bundle authentication): tampering PQ material in a share bundle —
+// here the reserved pad, the one byte the pre-fix open path ignored — must be
+// rejected. Before the fix `openShareAsRecipient` happily returned the key.
+test('share: forged PQ material (reserved pad) in the bundle is rejected (H2/M6)', async () => {
+  const recipientEnvelope = randomBytes(32)
+  const recipient = await createIdentity({ userId: 'recipient' })
+
+  const result = await pqHybrid.encryptBytes(randomBytes(1024), {
+    recipientPublicKey: recipient.publicBundle.mlKemPublicKey,
+    envelopeKey: randomBytes(32),
+    chunkSize: 1024,
+  })
+  const { shareBundle } = await buildShareForRecipient({
+    combinedKey: result.combinedKey,
+    fileId: result.fileId,
+    recipient: recipient.publicBundle,
+    recipientEnvelopeKey: recipientEnvelope,
+  })
+
+  // The reserved pad lives at: magic + length prefix + payload offset.
+  const pqLen = readUint32BE(shareBundle, SHARE_BUNDLE_PQLEN_OFFSET)
+  assert.ok(pqLen > RESERVED_PAD_OFFSET_IN_PAYLOAD)
+  const forged = shareBundle.slice()
+  forged[SHARE_BUNDLE_PAYLOAD_OFFSET + RESERVED_PAD_OFFSET_IN_PAYLOAD] ^= 0x01
+
+  // Pin the *cause*: a flipped reserved-pad byte must be rejected by the M6
+  // parser check, or — if that ever moved — by the whole-bundle AAD. It must
+  // NOT pass for an incidental reason (length/magic/structural guard).
+  await assert.rejects(
+    () =>
+      openShareAsRecipient({
+        shareBundle: forged,
+        fileId: result.fileId,
+        recipientSecretKey: recipient.mlKemSecretKey,
+        recipientEnvelopeKey: recipientEnvelope,
+      }),
+    /reserved classical_wrapped pad must be zero|authentication failed|tampered/,
+  )
+})
+
+// H2 (dedicated transport-key label): the raw KEM/envelope combined key (which
+// reuses the file-combiner HKDF label) must NOT be the key the share is wrapped
+// under. Before the fix it WAS — secretbox would open the wrapped key with it.
+test('share: raw KEM/envelope transport secret no longer unwraps the share (H2)', async () => {
+  const sodium = await getSodium()
+  const recipientEnvelope = randomBytes(32)
+  const recipient = await createIdentity({ userId: 'recipient' })
+
+  const result = await pqHybrid.encryptBytes(randomBytes(1024), {
+    recipientPublicKey: recipient.publicBundle.mlKemPublicKey,
+    envelopeKey: randomBytes(32),
+    chunkSize: 1024,
+  })
+  const { shareBundle } = await buildShareForRecipient({
+    combinedKey: result.combinedKey,
+    fileId: result.fileId,
+    recipient: recipient.publicBundle,
+    recipientEnvelopeKey: recipientEnvelope,
+  })
+
+  const pqLen = readUint32BE(shareBundle, SHARE_BUNDLE_PQLEN_OFFSET)
+  const payloadStart = SHARE_BUNDLE_PAYLOAD_OFFSET
+  const pqPayload = shareBundle.slice(payloadStart, payloadStart + pqLen)
+  const wrapNonce = shareBundle.slice(payloadStart + pqLen, payloadStart + pqLen + 24)
+  const wrappedKey = shareBundle.slice(payloadStart + pqLen + 24)
+
+  // The raw combined key the recipient recovers from the PQ payload.
+  const { combinedKey: rawTransport } = await decapsulateFromHeader({
+    suitePayload: pqPayload,
+    recipientSecretKey: recipient.mlKemSecretKey,
+    envelopeKey: recipientEnvelope,
+    fileId: result.fileId,
+  })
+  // It must not unwrap the share via the old secretbox construction.
+  let openedWithRaw: Uint8Array | false
+  try {
+    openedWithRaw = sodium.crypto_secretbox_open_easy(
+      wrappedKey,
+      wrapNonce,
+      rawTransport,
+    )
+  } catch {
+    openedWithRaw = false
+  }
+  assert.ok(!openedWithRaw, 'raw transport secret must not unwrap the share')
+
+  // The legitimate path still recovers the original combined key.
+  const recovered = await openShareAsRecipient({
+    shareBundle,
+    fileId: result.fileId,
+    recipientSecretKey: recipient.mlKemSecretKey,
+    recipientEnvelopeKey: recipientEnvelope,
+  })
+  assert.ok(bytesEqual(recovered, result.combinedKey))
+})
+
+// H2 (PQ substitution): replacing the bundle's pq_payload with a DIFFERENT but
+// individually-valid encapsulation (to the same recipient + file_id) must be
+// rejected. The wrap is bound to the original pq_payload via BOTH the AAD and
+// the transport-key derivation, so a substituted payload can never recover the
+// wrapped key. Before the fix the wrap (an AAD-less secretbox) did not
+// authenticate pq_payload at all.
+test('share: substituting the PQ payload for a different valid one is rejected (H2)', async () => {
+  const recipientEnvelope = randomBytes(32)
+  const recipient = await createIdentity({ userId: 'recipient' })
+
+  const result = await pqHybrid.encryptBytes(randomBytes(1024), {
+    recipientPublicKey: recipient.publicBundle.mlKemPublicKey,
+    envelopeKey: randomBytes(32),
+    chunkSize: 1024,
+  })
+  const { shareBundle } = await buildShareForRecipient({
+    combinedKey: result.combinedKey,
+    fileId: result.fileId,
+    recipient: recipient.publicBundle,
+    recipientEnvelopeKey: recipientEnvelope,
+  })
+
+  // A second, independently-valid pq_payload to the same recipient + file_id
+  // (same length, all-zero reserved pad, so it passes structural parsing).
+  const { suitePayload: otherPayload } = await encapsulateForRecipient({
+    recipientPublicKey: recipient.publicBundle.mlKemPublicKey,
+    envelopeKey: recipientEnvelope,
+    fileId: result.fileId,
+  })
+
+  const pqLen = readUint32BE(shareBundle, SHARE_BUNDLE_PQLEN_OFFSET)
+  assert.equal(otherPayload.length, pqLen)
+  const swapped = shareBundle.slice()
+  swapped.set(otherPayload, SHARE_BUNDLE_PAYLOAD_OFFSET)
+
+  await assert.rejects(
+    () =>
+      openShareAsRecipient({
+        shareBundle: swapped,
+        fileId: result.fileId,
+        recipientSecretKey: recipient.mlKemSecretKey,
+        recipientEnvelopeKey: recipientEnvelope,
+      }),
+    /authentication failed|tampered/,
+  )
+})
+
+// ──────────────────────────────────────────────────────────────────────
+// Share-bundle version marker
+// ──────────────────────────────────────────────────────────────────────
+
+// The hardened bundle is prefixed with "SF5S" + version 2 so it is
+// distinguishable from the earlier unversioned (secretbox) format.
+test('share: bundle carries the SF5S + version-2 magic', async () => {
+  const recipientEnvelope = randomBytes(32)
+  const owner = await createIdentity({ userId: 'owner' })
+  const recipient = await createIdentity({ userId: 'recipient' })
+  const result = await pqHybrid.encryptBytes(randomBytes(512), {
+    recipientPublicKey: owner.publicBundle.mlKemPublicKey,
+    envelopeKey: randomBytes(32),
+    chunkSize: 512,
+  })
+  const { shareBundle } = await buildShareForRecipient({
+    combinedKey: result.combinedKey,
+    fileId: result.fileId,
+    recipient: recipient.publicBundle,
+    recipientEnvelopeKey: recipientEnvelope,
+  })
+  assert.deepEqual(
+    Array.from(shareBundle.slice(0, SHARE_BUNDLE_MAGIC_LEN)),
+    [0x53, 0x46, 0x35, 0x53, 0x02], // "SF5S" + version 2
+  )
+})
+
+// An earlier-alpha (unversioned) bundle — or any bundle whose magic/version
+// does not match — must be rejected up front, not silently mis-parsed or
+// downgraded.
+test('share: open rejects an unversioned / wrong-version bundle (H2)', async () => {
+  const recipientEnvelope = randomBytes(32)
+  const recipient = await createIdentity({ userId: 'recipient' })
+  const result = await pqHybrid.encryptBytes(randomBytes(512), {
+    recipientPublicKey: recipient.publicBundle.mlKemPublicKey,
+    envelopeKey: randomBytes(32),
+    chunkSize: 512,
+  })
+  const { shareBundle } = await buildShareForRecipient({
+    combinedKey: result.combinedKey,
+    fileId: result.fileId,
+    recipient: recipient.publicBundle,
+    recipientEnvelopeKey: recipientEnvelope,
+  })
+
+  // Strip the 5-byte magic to emulate the old unversioned layout.
+  const unversioned = shareBundle.slice(SHARE_BUNDLE_MAGIC_LEN)
+  await assert.rejects(
+    () =>
+      openShareAsRecipient({
+        shareBundle: unversioned,
+        fileId: result.fileId,
+        recipientSecretKey: recipient.mlKemSecretKey,
+        recipientEnvelopeKey: recipientEnvelope,
+      }),
+    /bad magic|unsupported share bundle version|too short|malformed/,
+  )
+
+  // Flipping the version byte must also be rejected (no silent downgrade).
+  const wrongVersion = shareBundle.slice()
+  wrongVersion[SHARE_BUNDLE_MAGIC_LEN - 1] ^= 0x01 // flip the version byte
+  await assert.rejects(
+    () =>
+      openShareAsRecipient({
+        shareBundle: wrongVersion,
+        fileId: result.fileId,
+        recipientSecretKey: recipient.mlKemSecretKey,
+        recipientEnvelopeKey: recipientEnvelope,
+      }),
+    /bad magic|unsupported share bundle version/,
+  )
 })

@@ -5,6 +5,60 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.0.0-alpha.14 — 2026-06-10
+
+> Pre-launch security hardening of the `0x03` PQ-hybrid share bundle. The
+> share-bundle wire format changes; the on-disk file format and the `0x03`
+> file decryption path are unchanged, so existing `cipher_version-3` files
+> remain decryptable.
+
+### Changed (BREAKING — share-bundle wire format only)
+
+- **Share bundle (`0x03`) re-keyed and versioned (audit H2).** The share
+  transport key is now derived from the KEM/envelope secret under a dedicated
+  HKDF label `shieldfive/v1/share-transport` instead of reusing the
+  file-combiner label `shieldfive/v1/pq-hybrid/combine`, so a share transport
+  key can never equal a file's combined key. The combined key is now wrapped
+  with XChaCha20-Poly1305 whose AAD authenticates the **whole** bundle
+  (`magic || uint32_be(pq_len) || pq_payload || wrap_nonce`) rather than an
+  AAD-less secretbox that authenticated only the 32-byte key — PQ material
+  can no longer be substituted or stripped undetected. The bundle now carries
+  a `"SF5S"` + version-2 magic prefix so the hardened format is
+  distinguishable from (and not confusable with) the earlier unversioned one.
+  Share bundles produced by earlier alpha builds are rejected and must be
+  re-issued; no real shares exist pre-launch, so this is a clean break. See
+  `spec/format-v1.md` § "Share bundle".
+
+### Security
+
+- **Reserved-pad enforcement (`0x03`, audit M6).** The `0x03` suite-payload
+  parser now rejects a non-zero reserved pad in `classical_wrapped` (the 24
+  bytes after the 48-byte secretbox), closing a malleable unauthenticated
+  field. The default suite combine label and file path are unchanged.
+
+### Documentation
+
+- README/spec: corrected the "cross-file splice prevention (file_id AAD)"
+  table cell and prose — `file_id` is NOT in the chunk AAD; splice resistance
+  is structural via `file_id` as the HKDF salt in the chunk-key derivation
+  (audit INFO). Noted that the "no parallel implementation" scope is the
+  file-content cipher suites; the keyring/envelope layer uses WebCrypto
+  AES-GCM/HMAC directly.
+- **Planned (not in this release): suite-id binding in `0x03` chunk derivation
+  (audit M5).** The `0x03` chunk-key / nonce-prefix derivations reuse the
+  `0x02` xchacha HKDF labels and do not bind the suite id. This is **not
+  exploitable** (the header MAC authenticates the suite byte) and is left
+  **unchanged** — production `cipher_version-3` files depend on it and would
+  become undecryptable if altered. A future suite version (a new suite id,
+  not `0x03`) will bind the suite id into the chunk derivation. Recorded in
+  `spec/format-v1.md` and `spec/key-derivation.md`.
+
+### Tests
+
+- Added share-bundle PQ-substitution/forgery, dedicated-transport-key,
+  non-zero reserved-pad rejection, and share-bundle version-marker tests
+  (182 → 188 passing).
+
 ## 1.0.0-alpha.13 — 2026-06-09
 
 ### Fixed

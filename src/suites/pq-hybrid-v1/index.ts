@@ -46,9 +46,16 @@ export const ML_KEM_1024_SECRET_KEY_BYTES = 3168
  *   classical_wrapped   (72 bytes — 48 bytes secretbox + 24 bytes reserved zero pad)
  *   classical_nonce     (24 bytes)
  * Total: 1664 bytes
+ *
+ * The 24 reserved pad bytes (offsets 48..72 of classical_wrapped) MUST be
+ * zero. The parser rejects a non-zero pad (audit M6) so the field cannot be
+ * used as a malleable, unauthenticated side channel.
  */
 export const PQ_HYBRID_V1_SUITE_PAYLOAD_LENGTH =
   ML_KEM_1024_CIPHERTEXT_BYTES + 72 + 24
+
+/** Bytes of real secretbox at the start of the 72-byte classical_wrapped field. */
+const CLASSICAL_WRAPPED_SECRETBOX_BYTES = 48
 
 export interface PqHybridV1SuitePayload {
   mlkemCiphertext: Uint8Array // 1568 bytes
@@ -83,12 +90,26 @@ export function parsePqHybridV1SuitePayload(
       `pq-hybrid-v1: suite payload must be ${PQ_HYBRID_V1_SUITE_PAYLOAD_LENGTH} bytes`,
     )
   }
+  const classicalWrapped = bytes.slice(
+    ML_KEM_1024_CIPHERTEXT_BYTES,
+    ML_KEM_1024_CIPHERTEXT_BYTES + 72,
+  )
+  // M6: the 24-byte reserved pad after the 48-byte secretbox MUST be all
+  // zero. Reject otherwise so the field cannot carry unauthenticated bytes.
+  for (
+    let i = CLASSICAL_WRAPPED_SECRETBOX_BYTES;
+    i < classicalWrapped.length;
+    i += 1
+  ) {
+    if (classicalWrapped[i] !== 0) {
+      throw new RangeError(
+        'pq-hybrid-v1: reserved classical_wrapped pad must be zero',
+      )
+    }
+  }
   return {
     mlkemCiphertext: bytes.slice(0, ML_KEM_1024_CIPHERTEXT_BYTES),
-    classicalWrapped: bytes.slice(
-      ML_KEM_1024_CIPHERTEXT_BYTES,
-      ML_KEM_1024_CIPHERTEXT_BYTES + 72,
-    ),
+    classicalWrapped,
     classicalNonce: bytes.slice(
       ML_KEM_1024_CIPHERTEXT_BYTES + 72,
       PQ_HYBRID_V1_SUITE_PAYLOAD_LENGTH,

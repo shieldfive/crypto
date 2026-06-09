@@ -26,7 +26,6 @@ import {
   encapsulateForRecipient,
   decapsulateFromHeader,
   parsePqHybridV1SuitePayload,
-  buildPqHybridV1SuitePayload,
 } from '../suites/pq-hybrid-v1/index.js'
 export {
   SIGNATURE_ALGO_ED25519,
@@ -53,8 +52,18 @@ import {
 } from '../internal/encoding.js'
 import { randomBytes } from '../internal/runtime.js'
 import { getSodium } from '../internal/sodium.js'
+import { hkdfSha256 } from '../internal/hkdf.js'
+import { HKDF_INFO } from '../internal/types.js'
 
 const IDENTITY_BUNDLE_MAGIC = new Uint8Array([0x53, 0x46, 0x35, 0x49, 0x01]) // "SF5I" + version
+
+// Share-bundle magic: "SF5S" + version byte. Version 0x02 marks the hardened
+// share construction (audit H2/M6): a domain-separated transport key and an
+// AEAD wrap whose AAD authenticates the whole bundle. Earlier alpha builds
+// emitted an unversioned bundle (an AAD-less secretbox under the raw transport
+// secret); those are NOT readable here and are rejected by the magic check.
+// No real shares exist pre-launch, so this is a deliberate clean break.
+const SHARE_BUNDLE_MAGIC = new Uint8Array([0x53, 0x46, 0x35, 0x53, 0x02]) // "SF5S" + version 2
 
 export interface PublicIdentityBundle {
   /** ML-KEM-1024 public key (1568 bytes) */
@@ -268,40 +277,73 @@ export interface ShareFileInput {
  * key. To make sharing work, we use a different construction: we wrap
  * the existing combined key under (recipient PQ KEM ⊕ recipient
  * envelope) and emit only the wrapped form.
+ *
+ * Two properties this construction must hold (audit H2/M6):
+ *   1. The wrapping key is NOT the raw KEM/envelope combined key (which
+ *      reuses the file-combiner HKDF label). We run it through one more
+ *      HKDF under the dedicated `SHARE_TRANSPORT` label so a share key is
+ *      never equal to a file's combined key.
+ *   2. The wrap authenticates the WHOLE bundle, not just the 32-byte
+ *      combined key: the XChaCha20-Poly1305 AAD covers the version marker,
+ *      the length prefix, the entire pqPayload (including its reserved pad)
+ *      and the nonce, so PQ material cannot be substituted or stripped
+ *      without breaking the tag.
+ *
+ * The bundle is prefixed with `SHARE_BUNDLE_MAGIC` ("SF5S" + version) so the
+ * hardened format is distinguishable from the earlier unversioned one.
  */
 export async function buildShareForRecipient(
   input: ShareFileInput,
 ): Promise<{ shareBundle: Uint8Array }> {
   const sodium = await getSodium()
 
-  // Generate a fresh transport key for this share.
+  // Generate a fresh transport secret for this share.
   // ML-KEM encapsulation gives us the PQ-half of the transport secret.
-  const { suitePayload: pqPayload, combinedKey: transportKey } =
+  const { suitePayload: pqPayload, combinedKey: transportSecret } =
     await encapsulateForRecipient({
       recipientPublicKey: input.recipient.mlKemPublicKey,
       envelopeKey: input.recipientEnvelopeKey,
       fileId: input.fileId,
     })
 
-  // Now wrap the original combined key under the transport key using
-  // XSalsa20-Poly1305 secretbox.
-  if (transportKey.length !== 32) {
+  if (transportSecret.length !== 32) {
     throw new Error('buildShareForRecipient: transport key length wrong')
   }
+  // (1) Domain-separate the share transport key from the file-combiner output.
+  const shareTransportKey = await hkdfSha256({
+    ikm: transportSecret,
+    salt: input.fileId,
+    info: HKDF_INFO.SHARE_TRANSPORT,
+    length: 32,
+  })
+
+  // (2) Wrap the original combined key with an AEAD whose AAD authenticates
+  // the whole bundle prefix (magic || length || pqPayload || nonce). Binding
+  // the magic means the version marker cannot be stripped or downgraded
+  // without breaking the tag.
   const wrapNonce = randomBytes(24)
-  const wrappedCombinedKey = sodium.crypto_secretbox_easy(
-    input.combinedKey,
+  const aad = concatBytes([
+    SHARE_BUNDLE_MAGIC,
+    uint32BE(pqPayload.length),
+    pqPayload,
     wrapNonce,
-    transportKey,
+  ])
+  const wrappedCombinedKey = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+    input.combinedKey,
+    aad,
+    null,
+    wrapNonce,
+    shareTransportKey,
   )
   if (wrappedCombinedKey.length !== 32 + 16) {
-    throw new Error('buildShareForRecipient: secretbox produced unexpected length')
+    throw new Error('buildShareForRecipient: AEAD produced unexpected length')
   }
 
   // Share record format:
-  //   [4 bytes BE length of pqPayload][pqPayload][24-byte wrap nonce][48-byte wrapped combined key]
+  //   [5-byte magic][4 bytes BE length of pqPayload][pqPayload][24-byte wrap nonce][48-byte wrapped combined key]
   return {
     shareBundle: concatBytes([
+      SHARE_BUNDLE_MAGIC,
       uint32BE(pqPayload.length),
       pqPayload,
       wrapNonce,
@@ -322,10 +364,20 @@ export async function openShareAsRecipient(input: {
   recipientEnvelopeKey: Uint8Array
 }): Promise<Uint8Array> {
   const sodium = await getSodium()
-  if (input.shareBundle.length < 4) {
+  if (input.shareBundle.length < SHARE_BUNDLE_MAGIC.length + 4) {
     throw new Error('openShareAsRecipient: share too short')
   }
-  let offset = 0
+  // Reject anything that isn't a current ("SF5S" + version) share bundle.
+  // Earlier-alpha unversioned bundles fail here rather than producing an
+  // opaque authentication error later.
+  for (let i = 0; i < SHARE_BUNDLE_MAGIC.length; i += 1) {
+    if (input.shareBundle[i] !== SHARE_BUNDLE_MAGIC[i]) {
+      throw new Error(
+        'openShareAsRecipient: bad magic / unsupported share bundle version',
+      )
+    }
+  }
+  let offset = SHARE_BUNDLE_MAGIC.length
   const pqLen = readUint32BE(input.shareBundle, offset)
   offset += 4
   if (offset + pqLen + 24 + 48 !== input.shareBundle.length) {
@@ -337,31 +389,45 @@ export async function openShareAsRecipient(input: {
   offset += 24
   const wrappedCombinedKey = input.shareBundle.slice(offset, offset + 48)
 
-  // Sanity-check the suite payload structure (this throws if malformed).
+  // Structurally validate the suite payload. This rejects a non-zero reserved
+  // pad in classical_wrapped (M6) before any decapsulation work.
   parsePqHybridV1SuitePayload(pqPayload)
-  // Round-trip through builder to ensure we got back the same bytes.
-  const checkBytes = buildPqHybridV1SuitePayload(
-    parsePqHybridV1SuitePayload(pqPayload),
-  )
-  if (checkBytes.length !== pqPayload.length) {
-    throw new Error('openShareAsRecipient: pq payload self-check failed')
-  }
 
-  const { combinedKey: transportKey } = await decapsulateFromHeader({
+  const { combinedKey: transportSecret } = await decapsulateFromHeader({
     suitePayload: pqPayload,
     recipientSecretKey: input.recipientSecretKey,
     envelopeKey: input.recipientEnvelopeKey,
     fileId: input.fileId,
   })
+  const shareTransportKey = await hkdfSha256({
+    ikm: transportSecret,
+    salt: input.fileId,
+    info: HKDF_INFO.SHARE_TRANSPORT,
+    length: 32,
+  })
 
-  const unwrapped = sodium.crypto_secretbox_open_easy(
-    wrappedCombinedKey,
+  // The AAD must reproduce exactly what the builder authenticated: it binds
+  // the version marker, the length prefix, the whole pqPayload (incl. reserved
+  // pad) and the nonce, so any substitution/stripping of PQ material breaks
+  // the tag.
+  const aad = concatBytes([
+    SHARE_BUNDLE_MAGIC,
+    uint32BE(pqPayload.length),
+    pqPayload,
     wrapNonce,
-    transportKey,
-  )
-  if (!unwrapped) {
+  ])
+  let unwrapped: Uint8Array
+  try {
+    unwrapped = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+      null,
+      wrappedCombinedKey,
+      aad,
+      wrapNonce,
+      shareTransportKey,
+    )
+  } catch {
     throw new Error(
-      'openShareAsRecipient: secretbox unwrap failed — wrong recipient or tampered share',
+      'openShareAsRecipient: share authentication failed — wrong recipient or tampered share',
     )
   }
   if (unwrapped.length !== 32) {
