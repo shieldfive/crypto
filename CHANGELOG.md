@@ -5,6 +5,54 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+> Pre-launch security hardening of the `0x03` PQ-hybrid suite and its share
+> bundle. **These are wire-format changes and need human cryptographic
+> review before release.** Not yet published to npm.
+
+### Changed (BREAKING — wire format)
+
+- **Share bundle (`0x03`) re-keyed (audit H2).** The share transport key is
+  now derived from the KEM/envelope secret under a dedicated HKDF label
+  `shieldfive/v1/share-transport` instead of reusing the file-combiner label
+  `shieldfive/v1/pq-hybrid/combine`, so a share transport key can never equal
+  a file's combined key. The combined key is now wrapped with
+  XChaCha20-Poly1305 whose AAD authenticates the **whole** bundle
+  (`uint32_be(pq_len) || pq_payload || wrap_nonce`) rather than an
+  AAD-less secretbox that authenticated only the 32-byte key — PQ material
+  can no longer be substituted or stripped undetected. Share bundles
+  produced by earlier alpha builds are NOT readable and must be re-issued.
+  See `spec/format-v1.md` § "Share bundle".
+- **Suite `0x03` chunk derivation domain-separated (audit M5).** Chunk key
+  and nonce prefix are now derived under dedicated labels
+  `shieldfive/v1/pq-hybrid/chunk-key` and
+  `shieldfive/v1/pq-hybrid/nonce-prefix` (with the suite id folded into the
+  HKDF IKM) instead of borrowing the `0x02` xchacha labels. `0x03` files
+  written by earlier alpha builds will not decrypt under this version.
+
+### Security
+
+- **Reserved-pad enforcement (`0x03`, audit M6).** The `0x03` suite-payload
+  parser now rejects a non-zero reserved pad in `classical_wrapped` (the 24
+  bytes after the 48-byte secretbox), closing a malleable unauthenticated
+  field. The default suite combine label and file path are unchanged.
+
+### Documentation
+
+- README/spec: corrected the "cross-file splice prevention (file_id AAD)"
+  claim — `file_id` is NOT in the chunk AAD; splice resistance is structural
+  via `file_id` as the HKDF salt/IKM in the chunk-key and nonce-prefix
+  derivations (audit INFO). Added a note that the "no parallel
+  implementation" scope is the file-content suites; the keyring/envelope
+  layer uses WebCrypto AES-GCM/HMAC directly.
+
+### Tests
+
+- Added share-bundle substitution/forgery, dedicated-transport-key, non-zero
+  reserved-pad rejection, and `0x03` chunk-domain-separation tests
+  (182 → 186 passing).
+
 ## 1.0.0-alpha.13 — 2026-06-09
 
 ### Fixed

@@ -18,12 +18,15 @@ import {
   encryptBytes,
 } from '../../src/suites/pq-hybrid-v1/api.js'
 import {
+  createChunkContext,
   deriveMlKemKeypair,
   generateMlKemKeypair,
   ML_KEM_1024_PUBLIC_KEY_BYTES,
   ML_KEM_1024_SECRET_KEY_BYTES,
 } from '../../src/suites/pq-hybrid-v1/index.js'
 import { randomBytes } from '../../src/internal/runtime.js'
+import { hkdfSha256 } from '../../src/internal/hkdf.js'
+import { HKDF_INFO } from '../../src/internal/types.js'
 
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false
@@ -269,4 +272,43 @@ test('pq-hybrid-v1: progress callbacks fire correctly', async () => {
   assert.equal(reports.length, 8)
   assert.equal(reports[reports.length - 1], 1)
   assert.equal(result.totalChunks, 8)
+})
+
+// ──────────────────────────────────────────────────────────────────────
+// M5: suite 0x03 must NOT reuse the 0x02 (xchacha) chunk-key / nonce-prefix
+// HKDF domain, and must fold the suite id into the derivation. This locks
+// the dedicated labels: before the fix the derivation reused
+// HKDF_INFO.XCHACHA_* with ikm = combinedKey / fileId, so these assertions
+// would have produced EQUAL bytes and failed.
+// ──────────────────────────────────────────────────────────────────────
+test('pq-hybrid-v1: chunk key + nonce prefix do not reuse the xchacha-v1 domain (M5)', async () => {
+  const combinedKey = randomBytes(32)
+  const fileId = randomBytes(16)
+
+  const ctx = await createChunkContext(combinedKey, fileId, 1)
+
+  // What the OLD (pre-fix) derivation would have produced: the xchacha labels
+  // with ikm = combinedKey (chunk key) and ikm = fileId (nonce prefix).
+  const xchachaChunkKey = await hkdfSha256({
+    ikm: combinedKey,
+    salt: fileId,
+    info: HKDF_INFO.XCHACHA_CHUNK_KEY,
+    length: 32,
+  })
+  const xchachaNoncePrefix = await hkdfSha256({
+    ikm: fileId,
+    info: HKDF_INFO.XCHACHA_NONCE_PREFIX,
+    length: 16,
+  })
+
+  assert.equal(ctx.combinedKey.length, 32)
+  assert.equal(ctx.noncePrefix.length, 16)
+  assert.ok(
+    !bytesEqual(ctx.combinedKey, xchachaChunkKey),
+    'pq-hybrid chunk key must not equal the xchacha-v1 chunk key for the same inputs',
+  )
+  assert.ok(
+    !bytesEqual(ctx.noncePrefix, xchachaNoncePrefix),
+    'pq-hybrid nonce prefix must not equal the xchacha-v1 nonce prefix for the same inputs',
+  )
 })

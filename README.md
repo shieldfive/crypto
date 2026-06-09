@@ -5,7 +5,7 @@
 > [ShieldFive](https://shieldfive.com), released as a standalone library.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-182%2F182-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-186%2F186-brightgreen.svg)](tests/)
 [![Status](https://img.shields.io/badge/status-alpha-orange.svg)](#status)
 
 ## Status & honest scope
@@ -17,11 +17,16 @@ treat this library as a serious work-in-progress rather than a finished
 product.
 
 The design choices documented in [`spec/`](spec/) are deliberate and
-reviewable. The implementation is covered by 182 passing tests including
+reviewable. The implementation is covered by 186 passing tests including
 truncation, reordering, splice, and tampering detection across all four
 suites. That is enough for internal dogfooding. It is **not** enough to
 claim "most secure crypto library" — that claim requires external review
 this library has not yet received.
+
+When this library says it avoids a parallel cryptographic implementation,
+that scope is the file-content cipher suites. The keyring/envelope layer
+that wraps content keys is built directly on WebCrypto AES-GCM and HMAC
+(via `crypto.subtle`), not on a second hand-rolled implementation.
 
 ## Design positions
 
@@ -181,9 +186,11 @@ chunk_i := length_prefix(4) || AEAD-ciphertext-with-tag
 ```
 
 Every chunk's AEAD authenticator binds the chunk index, total chunk count,
-final-chunk flag, and file_id. This makes truncation, reordering, and
-cross-file splicing structurally detectable rather than relying on
-application-layer hashes.
+and final-chunk flag. The `file_id` is NOT part of the AAD; cross-file
+splice resistance is structural, coming from the suite-specific chunk-key
+and nonce-prefix derivations that mix `file_id` in as the HKDF salt/IKM.
+Together these make truncation, reordering, and cross-file splicing
+detectable by the AEAD rather than by application-layer hashes.
 
 ## Cipher suites
 

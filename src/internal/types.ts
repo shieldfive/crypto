@@ -87,7 +87,18 @@ export const HKDF_INFO = Object.freeze({
   XCHACHA_CHUNK_KEY: 'shieldfive/v1/xchacha/chunk-key',
   XCHACHA_NONCE_PREFIX: 'shieldfive/v1/xchacha/nonce-prefix',
   PQ_HYBRID_COMBINE: 'shieldfive/v1/pq-hybrid/combine',
+  // Suite 0x03 derives its chunk key + nonce prefix under dedicated labels
+  // (not the 0x02 xchacha labels) so the two suites never share a chunk-key
+  // domain even when handed the same content key + file_id. The suite id is
+  // additionally folded into the IKM — see deriveChunkContext.
+  PQ_HYBRID_CHUNK_KEY: 'shieldfive/v1/pq-hybrid/chunk-key',
+  PQ_HYBRID_NONCE_PREFIX: 'shieldfive/v1/pq-hybrid/nonce-prefix',
   ML_KEM_1024_SEED: 'shieldfive/v1/pq-hybrid/ml-kem-1024-seed',
+  // Re-encrypting a file's combined key to a share recipient wraps it under a
+  // transport key derived with THIS label, distinct from the file-combiner
+  // label above, so a share transport key is never equal to a file's
+  // combined key for the same (recipient, envelope, file_id).
+  SHARE_TRANSPORT: 'shieldfive/v1/share-transport',
   ARGON2ID_SALT_COMPRESSION: 'shieldfive/v1/argon2id/salt-compression',
 })
 

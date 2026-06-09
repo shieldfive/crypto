@@ -206,7 +206,9 @@ test('aes-gcm-v1: detects chunk reordering', async () => {
 
 test('aes-gcm-v1: detects splice of chunk from another file', async () => {
   // Two files with the SAME content key but different file_ids and plaintexts.
-  // Splice file B's chunk into file A. With file_id-bound AAD, this MUST fail.
+  // Splice file B's chunk into file A. file_id is NOT in the AAD; it is the
+  // HKDF salt for the chunk key, so the spliced chunk decrypts under the wrong
+  // key and the AEAD tag check MUST fail.
   const sharedKey = randomBytes(32)
   const fileIdA = randomBytes(16)
   const fileIdB = randomBytes(16)

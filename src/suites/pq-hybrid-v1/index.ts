@@ -13,7 +13,10 @@
  *   - Classical share encrypted under envelope key with XSalsa20-Poly1305
  *     secretbox (libsodium).
  *   - PQ encapsulation via @noble/post-quantum's ML-KEM-1024.
- *   - Chunk AEAD identical to xchacha-v1 once the combined key is derived.
+ *   - Chunk AEAD uses the same XChaCha20-Poly1305 primitive as xchacha-v1,
+ *     but derives its chunk key + nonce prefix under dedicated 0x03 HKDF
+ *     labels (with the suite id folded into the IKM), so the two suites
+ *     never share a chunk-key derivation domain.
  */
 
 import { ml_kem1024 } from '@noble/post-quantum/ml-kem.js'
@@ -22,6 +25,7 @@ import { buildChunkAad } from '../../format/header.js'
 import {
   HKDF_INFO,
   HEADER_SIZES,
+  SUITE,
   type ParsedHeader,
 } from '../../internal/types.js'
 import { concatBytes, uint64BE } from '../../internal/encoding.js'
@@ -46,9 +50,16 @@ export const ML_KEM_1024_SECRET_KEY_BYTES = 3168
  *   classical_wrapped   (72 bytes — 48 bytes secretbox + 24 bytes reserved zero pad)
  *   classical_nonce     (24 bytes)
  * Total: 1664 bytes
+ *
+ * The 24 reserved pad bytes (offsets 48..72 of classical_wrapped) MUST be
+ * zero. The parser rejects a non-zero pad so that the field cannot be used
+ * as a malleable, unauthenticated side channel.
  */
 export const PQ_HYBRID_V1_SUITE_PAYLOAD_LENGTH =
   ML_KEM_1024_CIPHERTEXT_BYTES + 72 + 24
+
+/** Offset of the reserved zero pad within the 72-byte classical_wrapped field. */
+const CLASSICAL_WRAPPED_SECRETBOX_BYTES = 48
 
 export interface PqHybridV1SuitePayload {
   mlkemCiphertext: Uint8Array // 1568 bytes
@@ -83,12 +94,22 @@ export function parsePqHybridV1SuitePayload(
       `pq-hybrid-v1: suite payload must be ${PQ_HYBRID_V1_SUITE_PAYLOAD_LENGTH} bytes`,
     )
   }
+  const classicalWrapped = bytes.slice(
+    ML_KEM_1024_CIPHERTEXT_BYTES,
+    ML_KEM_1024_CIPHERTEXT_BYTES + 72,
+  )
+  // The 24-byte reserved pad after the 48-byte secretbox MUST be all zero.
+  // Reject otherwise so the field cannot carry unauthenticated attacker bytes.
+  for (let i = CLASSICAL_WRAPPED_SECRETBOX_BYTES; i < classicalWrapped.length; i += 1) {
+    if (classicalWrapped[i] !== 0) {
+      throw new RangeError(
+        'pq-hybrid-v1: reserved classical_wrapped pad must be zero',
+      )
+    }
+  }
   return {
     mlkemCiphertext: bytes.slice(0, ML_KEM_1024_CIPHERTEXT_BYTES),
-    classicalWrapped: bytes.slice(
-      ML_KEM_1024_CIPHERTEXT_BYTES,
-      ML_KEM_1024_CIPHERTEXT_BYTES + 72,
-    ),
+    classicalWrapped,
     classicalNonce: bytes.slice(
       ML_KEM_1024_CIPHERTEXT_BYTES + 72,
       PQ_HYBRID_V1_SUITE_PAYLOAD_LENGTH,
@@ -162,16 +183,20 @@ async function deriveChunkContext(
   fileId: Uint8Array,
   totalChunks: number,
 ): Promise<PqHybridV1ChunkContext> {
-  // Reuse the xchacha derivation domain — semantically the same chunk-key role.
+  // Suite 0x03 uses its OWN chunk-key / nonce-prefix HKDF domain rather than
+  // borrowing the 0x02 xchacha labels, and folds the suite id into the IKM, so
+  // a 0x03 file and a 0x02 file can never derive the same chunk key / nonce
+  // even if handed the same combined key + file_id.
+  const suiteId = new Uint8Array([SUITE.PQ_HYBRID_XCHACHA_MLKEM1024_V1])
   const chunkKey = await hkdfSha256({
-    ikm: combinedKey,
+    ikm: concatBytes([suiteId, combinedKey]),
     salt: fileId,
-    info: HKDF_INFO.XCHACHA_CHUNK_KEY,
+    info: HKDF_INFO.PQ_HYBRID_CHUNK_KEY,
     length: 32,
   })
   const noncePrefix = await hkdfSha256({
-    ikm: fileId,
-    info: HKDF_INFO.XCHACHA_NONCE_PREFIX,
+    ikm: concatBytes([suiteId, fileId]),
+    info: HKDF_INFO.PQ_HYBRID_NONCE_PREFIX,
     length: 16,
   })
   return { combinedKey: chunkKey, noncePrefix, totalChunks }

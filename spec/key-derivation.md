@@ -101,15 +101,23 @@ iv / nonce_i     = nonce_prefix || counter
 For the PQ-hybrid suite, `content_key` is replaced by the combined key
 `K = HKDF(classical_share || pq_share, salt=file_id,
 info="shieldfive/v1/pq-hybrid/combine", L=32)`. The chunk-key and
-nonce-prefix derivations are then identical to the XChaCha suite's,
-with `K` in the role of `content_key` and the same info strings
-(`shieldfive/v1/xchacha/chunk-key` and
-`shieldfive/v1/xchacha/nonce-prefix`). Reuse of those info strings
-across the two suites is safe because the IKM space is partitioned:
-XChaCha uses a fresh random `content_key` per file, PQ-hybrid uses the
-file-bound HKDF output `K`. Both are 32 bytes of uniformly random or
-pseudorandom material per file; cross-suite output collision
-probability is `2^-256`.
+nonce-prefix derivations use the same XChaCha20-Poly1305 chunk format,
+but under DEDICATED PQ-hybrid info strings — never the 0x02 xchacha
+labels — and with the suite id folded into the IKM:
+
+```
+chunk_key    = HKDF(0x03 || K, salt=file_id,
+                    info="shieldfive/v1/pq-hybrid/chunk-key", L=32)
+
+nonce_prefix = HKDF(0x03 || file_id,
+                    info="shieldfive/v1/pq-hybrid/nonce-prefix", L=16)
+```
+
+Domain separation here is structural: a 0x03 file and a 0x02 file can
+never derive the same chunk key or nonce prefix even when handed the same
+32-byte content key and `file_id`, because both the info string and the
+suite-id-prefixed IKM differ. (Earlier drafts reused the xchacha labels;
+that reuse was removed in favour of explicit per-suite domains.)
 
 ## Forbidden cross-context usage
 
@@ -124,7 +132,10 @@ shieldfive/v1/aes-gcm-v2/nonce-prefix
 shieldfive/v1/xchacha/chunk-key
 shieldfive/v1/xchacha/nonce-prefix
 shieldfive/v1/pq-hybrid/combine
+shieldfive/v1/pq-hybrid/chunk-key
+shieldfive/v1/pq-hybrid/nonce-prefix
 shieldfive/v1/pq-hybrid/ml-kem-1024-seed
+shieldfive/v1/share-transport
 shieldfive/v1/argon2id/salt-compression
 ```
 
