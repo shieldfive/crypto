@@ -4,12 +4,12 @@
  * Per-file content key. Per-chunk AEAD with file_id-bound AAD that
  * authenticates chunk index, total chunks, and the is-final flag. The
  * 12-byte GCM IV is split into an 8-byte file-derived prefix and a 4-byte
- * big-endian counter — a wider prefix than v1 (0x01) so the per-file
- * `(prefix, counter)` collision space across files sharing a content
- * key shrinks from 2^32 to 2^64. The per-file chunk ceiling drops from
- * 2^64 to 2^32 chunks, which is still well above any practical bound
- * the format permits (`MAX_TOTAL_CHUNKS` is 1e9 and `chunkIndex` is a
- * safe JS integer).
+ * big-endian counter — a wider prefix than v1 (0x01) so the cross-file
+ * nonce-prefix space widens from 2^32 to 2^64, shrinking the chance of an
+ * IV collision across files that share a content key. The per-file chunk
+ * ceiling drops from 2^64 to 2^32 chunks, which is still well above any
+ * practical bound the format permits (`MAX_TOTAL_CHUNKS` is 1e9 and
+ * `chunkIndex` is a safe JS integer).
  */
 
 import { buildChunkAad } from '../../format/header.js'
