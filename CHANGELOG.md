@@ -5,6 +5,20 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.0.0-alpha.12 — 2026-06-09
+
+### Documentation
+
+- README: corrected the test-suite badge and prose from 171 to
+  **182** tests. The 11 additional tests are the offline single-file
+  decryptor example suite that landed after the badge was last
+  refreshed; `npm test` now reports 182/182.
+- README: the cipher-suite table and the "four suites" wording now
+  match the package exports. Suite 0x04 `aes-gcm-v2` shipped in
+  alpha.11 but the README published with that release still listed
+  only three suites.
+- No source changes in this release — documentation only.
+
 ## 1.0.0-alpha.11 — 2026-05-21
 
 ### Added

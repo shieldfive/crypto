@@ -5,7 +5,7 @@
 > [ShieldFive](https://shieldfive.com), released as a standalone library.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-171%2F171-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-182%2F182-brightgreen.svg)](tests/)
 [![Status](https://img.shields.io/badge/status-alpha-orange.svg)](#status)
 
 ## Status & honest scope
@@ -17,7 +17,7 @@ treat this library as a serious work-in-progress rather than a finished
 product.
 
 The design choices documented in [`spec/`](spec/) are deliberate and
-reviewable. The implementation is covered by 171 passing tests including
+reviewable. The implementation is covered by 182 passing tests including
 truncation, reordering, splice, and tampering detection across all four
 suites. That is enough for internal dogfooding. It is **not** enough to
 claim "most secure crypto library" — that claim requires external review
@@ -244,7 +244,7 @@ Requires Node 20+.
 
 **Alpha.** The wire format is frozen for the v1 release, but the public
 TypeScript API may make small adjustments before 1.0.0 stable. Test
-coverage is comprehensive (171 tests, all four suites, all architectural
+coverage is comprehensive (182 tests, all four suites, all architectural
 guarantees verified). A formal third-party security audit is planned for
 the 1.0.0 stable milestone — until that audit lands, treat this library
 as a serious work-in-progress rather than a finished product.
