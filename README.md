@@ -6,11 +6,11 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-188%2F188-brightgreen.svg)](tests/)
-[![Status](https://img.shields.io/badge/status-alpha-orange.svg)](#status)
+[![Status](https://img.shields.io/badge/status-beta-yellow.svg)](#status)
 
 ## Status & honest scope
 
-This library is **alpha**. The wire format is frozen for the v1 release;
+This library is **beta**. The wire format is frozen for the v1 release;
 the public TypeScript API may make minor adjustments before v1.0.0 stable.
 It has **not** undergone external cryptographic audit. Until it does,
 treat this library as a serious work-in-progress rather than a finished
@@ -251,7 +251,7 @@ Requires Node 20+.
 
 ## Status
 
-**Alpha.** The wire format is frozen for the v1 release, but the public
+**Beta.** The wire format is frozen for the v1 release, but the public
 TypeScript API may make small adjustments before 1.0.0 stable. Test
 coverage is comprehensive (188 tests, all four suites, all architectural
 guarantees verified). A formal third-party security audit is planned for

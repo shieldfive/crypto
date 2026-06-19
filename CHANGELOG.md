@@ -5,6 +5,32 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.0.0-beta.1 — 2026-06-19
+
+> Promotes the library from alpha to **beta**. There are no functional,
+> cryptographic, or wire-format changes since `1.0.0-alpha.14`; this release
+> records that the v1 on-disk format and the public TypeScript API are now
+> considered stable enough to leave alpha. `1.0.0` stable remains gated on
+> the planned external third-party audit.
+
+### Changed
+
+- **Status: alpha → beta.** The `0x03` PQ-hybrid share-bundle hardening
+  (audit findings H2/M6, doc M5) shipped in `1.0.0-alpha.14` and is unchanged
+  here. The wire format stays frozen; existing `cipher_version-3` files and
+  hardened (`SF5S` v2) share bundles remain valid.
+- `SHIELDFIVE_CRYPTO_VERSION`, the status badge, the README/SECURITY status
+  notes, and the example decryptor updated to `1.0.0-beta.1`.
+
+### Notes
+
+- Beta means the v1 wire format is frozen and the public API is stable; minor,
+  backward-compatible API additions remain possible before `1.0.0` stable, but
+  breaking changes are not planned.
+- This is **not** a security release — no vulnerabilities were fixed between
+  `1.0.0-alpha.14` and `1.0.0-beta.1`. The library has still **not** had an
+  external cryptographic audit.
+
 ## 1.0.0-alpha.14 — 2026-06-10
 
 > Pre-launch security hardening of the `0x03` PQ-hybrid share bundle. The

@@ -10,11 +10,11 @@
 // https://shieldfive.com/export. The recipe walks through pulling your
 // ciphertext archive and running this script; the two are kept in sync.
 //
-// Target library version: @shieldfive/crypto 1.0.0-alpha.14 — the version
-// shieldfive.com currently pins. Install the exact version your files were
+// Target library version: @shieldfive/crypto 1.0.0-beta.1 — the latest
+// published version. Install the exact version your files were
 // encrypted with (printed by the export bundle); the public API used here
 // (autoDecryptBlob, decryptV0, createIdentity, deriveMasterSecret) is stable
-// across the 1.0.0-alpha line. Handles the v0 legacy format (cipher_version
+// across the 1.0.0 pre-release line. Handles the v0 legacy format (cipher_version
 // 1), AES-256-GCM-v1 / suite 0x01 (cipher_version 2), and the PQ-hybrid
 // ML-KEM-1024 default / suite 0x03 (cipher_version 3).
 //
@@ -27,7 +27,7 @@
 //     --recovery-key 'BASE64...' --output ./decrypted
 //
 // Required peer dependencies (install in the working directory):
-//   npm install @shieldfive/crypto@1.0.0-alpha.14 libsodium-wrappers-sumo
+//   npm install @shieldfive/crypto@1.0.0-beta.1 libsodium-wrappers-sumo
 //
 // Outputs:
 //   - --output is treated as a DIRECTORY by default (the recipe uses
