@@ -32,6 +32,7 @@ import {
   decryptChunk,
   encryptChunk,
   generateContentMaterial,
+  parseAesGcmV1SuitePayload,
 } from '../suites/aes-gcm-v1/index.js'
 import {
   DEFAULT_CHUNK_SIZE,
@@ -133,6 +134,11 @@ export function createAesGcmV1EncryptStream(
   const suitePayload =
     options.suitePayloadOverride ??
     new Uint8Array(AES_GCM_V1_SUITE_PAYLOAD_LENGTH)
+  if (suitePayload.length !== AES_GCM_V1_SUITE_PAYLOAD_LENGTH) {
+    throw new RangeError(
+      `encrypt stream: suitePayloadOverride must be ${AES_GCM_V1_SUITE_PAYLOAD_LENGTH} bytes`,
+    )
+  }
 
   const ed25519SecretKey = options.ed25519SecretKey
   if (ed25519SecretKey && ed25519SecretKey.length !== ED25519_SECRET_KEY_LENGTH) {
@@ -427,6 +433,12 @@ export function createAesGcmV1DecryptStream(
     // and mac fields.
     const { verifyHeaderMac } = await import('../format/header.js')
     await verifyHeaderMac(parsedHeader, contentKey)
+
+    // Enforce the suite_payload structure the whole-blob reader also checks
+    // (length == 72), so the stream and blob readers agree on what is a
+    // well-formed file. Validated after the MAC so it only interprets
+    // authenticated bytes.
+    parseAesGcmV1SuitePayload(parsedHeader.suitePayload)
 
     contextPromise = createChunkContext(
       contentKey,

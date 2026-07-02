@@ -40,6 +40,7 @@ import {
   decryptChunk,
   encapsulateForRecipient,
   encryptChunk,
+  parsePqHybridV1SuitePayload,
 } from '../suites/pq-hybrid-v1/index.js'
 import {
   DEFAULT_CHUNK_SIZE,
@@ -174,6 +175,10 @@ export function createPqHybridV1EncryptStream(
       `encrypt stream: suitePayload must be ${PQ_HYBRID_V1_SUITE_PAYLOAD_LENGTH} bytes`,
     )
   }
+  // Reject a structurally-invalid payload (e.g. a non-zero reserved
+  // classical_wrapped pad, M6) at encode time too, so the stream never emits
+  // a file its own readers would refuse.
+  parsePqHybridV1SuitePayload(suitePayload)
 
   const ed25519SecretKey = options.ed25519SecretKey
   if (ed25519SecretKey && ed25519SecretKey.length !== ED25519_SECRET_KEY_LENGTH) {
@@ -508,6 +513,14 @@ export function createPqHybridV1DecryptStream(
 
     const { verifyHeaderMac } = await import('../format/header.js')
     await verifyHeaderMac(parsedHeader, combinedKey)
+
+    // Combined-key mode skips decapsulateFromHeader, so it must run the same
+    // structural check the KEM path gets there: suite_payload length + the
+    // all-zero reserved classical_wrapped pad (M6, spec/format-v1.md § 0x03).
+    // Validated after the MAC so it only interprets authenticated bytes.
+    if (combinedKeyOverride) {
+      parsePqHybridV1SuitePayload(parsedHeader.suitePayload)
+    }
 
     contextPromise = createChunkContext(
       combinedKey,

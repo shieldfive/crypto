@@ -16,6 +16,12 @@ import {
   encryptStreamAesGcmV1,
 } from '../../src/streams/aes-gcm-v1.js'
 import * as aes from '../../src/suites/aes-gcm-v1/api.js'
+import {
+  buildHeaderUnauthenticated,
+  deriveHeaderMacKey,
+  parseHeader,
+} from '../../src/format/header.js'
+import { hmacSha256 } from '../../src/internal/hmac.js'
 import { randomBytes } from '../../src/internal/runtime.js'
 
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -267,4 +273,76 @@ test('stream decrypt: produces output progressively (not buffered to end)', asyn
     const { done } = await reader.read()
     if (done) break
   }
+})
+
+// ─────────────────────────────────────────────────────────────────────
+// Canonical-format parity: the stream reader must reject the same
+// malformed suite_payload the whole-blob decryptBlob rejects — and the
+// encoder must never emit one.
+// ─────────────────────────────────────────────────────────────────────
+
+// Rebuild a ciphertext's header around a (possibly malformed) suite_payload,
+// recomputing the header MAC so it stays authenticated. Models a malformed
+// file from a party that holds the key, rather than relying on the encoder
+// being permissive.
+async function reforgeSuitePayload(
+  ciphertext: Uint8Array,
+  contentKey: Uint8Array,
+  mutate: (suitePayload: Uint8Array) => Uint8Array,
+): Promise<Uint8Array> {
+  const parsed = parseHeader(ciphertext)
+  const unauth = buildHeaderUnauthenticated({
+    suite: parsed.suite,
+    fileId: parsed.fileId,
+    chunkSize: parsed.chunkSize,
+    totalChunks: parsed.totalChunks,
+    plaintextSize: parsed.plaintextSize,
+    suitePayload: mutate(parsed.suitePayload.slice()),
+  })
+  const mac = await hmacSha256(
+    await deriveHeaderMacKey(contentKey, parsed.fileId),
+    unauth,
+  )
+  const chunks = ciphertext.slice(parsed.headerLength)
+  const out = new Uint8Array(unauth.length + mac.length + chunks.length)
+  out.set(unauth, 0)
+  out.set(mac, unauth.length)
+  out.set(chunks, unauth.length + mac.length)
+  return out
+}
+
+// Regression: the stream decryptor previously accepted a suite_payload whose
+// length != 72 (it never parsed the field), even though decryptBlob rejects
+// it via parseAesGcmV1SuitePayload. The two readers must agree.
+test('aes-gcm-v1 stream decrypt: rejects a suite_payload whose length is not 72', async () => {
+  const contentKey = randomBytes(32)
+  const plaintext = randomBytes(200)
+  const { ciphertext } = encryptStreamAesGcmV1(streamFrom(plaintext), {
+    contentKey,
+    plaintextSize: plaintext.length,
+    chunkSize: 64,
+  })
+  // Truncate the suite_payload to 71 bytes and re-authenticate the header.
+  const forged = await reforgeSuitePayload(
+    await drain(ciphertext),
+    contentKey,
+    (suitePayload) => suitePayload.slice(0, 71),
+  )
+  await assert.rejects(
+    () =>
+      drain(decryptStreamAesGcmV1(streamFrom(forged), { contentKey }).plaintext),
+    /suite payload must be 72 bytes/,
+  )
+})
+
+test('aes-gcm-v1 stream encrypt: rejects a suitePayloadOverride whose length is not 72', () => {
+  assert.throws(
+    () =>
+      createAesGcmV1EncryptStream({
+        plaintextSize: 10,
+        contentKey: randomBytes(32),
+        suitePayloadOverride: new Uint8Array(71),
+      }),
+    /suitePayloadOverride must be 72 bytes/,
+  )
 })
