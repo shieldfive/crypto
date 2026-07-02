@@ -5,6 +5,34 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.0.0-beta.2 — 2026-07-02
+
+> Reader-consistency hardening for the streaming decrypt paths. The two
+> streaming decryptors now enforce the same `suite_payload` structure their
+> whole-blob and KEM counterparts already require, so every reader mode of a
+> suite agrees on what a well-formed file is. No wire-format, key-derivation,
+> or public-API change: files produced by earlier versions decrypt identically
+> in every mode, and all prior test vectors are unchanged.
+
+### Fixed
+
+- **`0x03` PQ-hybrid stream, combined-key mode** now rejects a header whose
+  24-byte reserved `classical_wrapped` pad is non-zero (M6, `spec/format-v1.md`
+  § `0x03`), matching `parsePqHybridV1SuitePayload`, `decryptBlob`, and the KEM
+  stream path. The combined-key reader previously skipped this structural check.
+- **`0x01` AES-GCM stream** now rejects a `suite_payload` whose length is not
+  72 bytes, matching `parseAesGcmV1SuitePayload` and `decryptBlob`.
+- Both streaming **encryptors** now reject a malformed caller-supplied
+  `suite_payload`, so the library never emits a file its own readers refuse.
+
+### Security
+
+- These are canonical-parsing / reader-consistency fixes, **not** a
+  confidentiality or integrity break. `suite_payload` is covered by the header
+  MAC, so an accepted malformed file already required the content/combined key;
+  no forgery, key-recovery, or plaintext-recovery vector was present. Reported
+  by avaragebughunter@gmail.com.
+
 ## 1.0.0-beta.1 — 2026-06-19
 
 > Promotes the library from alpha to **beta**. There are no functional,
