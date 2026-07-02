@@ -5,6 +5,20 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.0.0-beta.3 — 2026-07-02
+
+> Re-release of `1.0.0-beta.2` through the tag-triggered CI pipeline so the
+> published tarball carries a verified npm **provenance** attestation. There
+> are **no** functional, cryptographic, API, or wire-format changes from
+> `1.0.0-beta.2`; the source is identical. `1.0.0-beta.2` was published
+> manually while CI credentials were being set up and therefore lacks the
+> provenance badge — this release supersedes it on the `beta` channel.
+
+### Changed
+
+- Bump version and `SHIELDFIVE_CRYPTO_VERSION` to `1.0.0-beta.3`; publish via
+  CI with provenance. No code changes relative to `1.0.0-beta.2`.
+
 ## 1.0.0-beta.2 — 2026-07-02
 
 > Reader-consistency hardening for the streaming decrypt paths. The two
