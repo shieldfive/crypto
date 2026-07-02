@@ -30,10 +30,17 @@ function decryptStreamPqHybridV1(
 }
 import * as pq from '../../src/suites/pq-hybrid-v1/api.js'
 import {
+  ML_KEM_1024_CIPHERTEXT_BYTES,
   PQ_HYBRID_V1_TAG_BYTES,
   encapsulateForRecipient,
   generateMlKemKeypair,
 } from '../../src/suites/pq-hybrid-v1/index.js'
+import {
+  buildHeaderUnauthenticated,
+  deriveHeaderMacKey,
+  parseHeader,
+} from '../../src/format/header.js'
+import { hmacSha256 } from '../../src/internal/hmac.js'
 import { randomBytes } from '../../src/internal/runtime.js'
 
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -620,5 +627,98 @@ test('pq-hybrid stream decrypt: missing both KEM secret and combinedKey throws',
   // a worker postMessage boundary).
   assert.throws(() =>
     createPqHybridV1DecryptStream({} as PqHybridV1DecryptStreamOptions),
+  )
+})
+
+// ─────────────────────────────────────────────────────────────────────
+// Canonical-format parity: both stream reader modes must reject the same
+// malformed Suite 0x03 headers the parser, the KEM path, and the whole-blob
+// decryptor reject — and the encoder must never emit such a header.
+// ─────────────────────────────────────────────────────────────────────
+
+// Rebuild a ciphertext's header around a (possibly malformed) suite_payload,
+// recomputing the header MAC so it stays authenticated. Models a malformed
+// file from a party that holds the key — the only party that can produce one,
+// since suite_payload is MAC-covered — rather than relying on the encoder
+// being permissive.
+async function reforgeSuitePayload(
+  ciphertext: Uint8Array,
+  contentKey: Uint8Array,
+  mutate: (suitePayload: Uint8Array) => Uint8Array,
+): Promise<Uint8Array> {
+  const parsed = parseHeader(ciphertext)
+  const unauth = buildHeaderUnauthenticated({
+    suite: parsed.suite,
+    fileId: parsed.fileId,
+    chunkSize: parsed.chunkSize,
+    totalChunks: parsed.totalChunks,
+    plaintextSize: parsed.plaintextSize,
+    suitePayload: mutate(parsed.suitePayload.slice()),
+  })
+  const mac = await hmacSha256(
+    await deriveHeaderMacKey(contentKey, parsed.fileId),
+    unauth,
+  )
+  const chunks = ciphertext.slice(parsed.headerLength)
+  const out = new Uint8Array(unauth.length + mac.length + chunks.length)
+  out.set(unauth, 0)
+  out.set(mac, unauth.length)
+  out.set(chunks, unauth.length + mac.length)
+  return out
+}
+
+// Regression: a combinedKey reader previously accepted a Suite 0x03 header
+// whose 24-byte reserved classical_wrapped pad was non-zero, even though
+// parsePqHybridV1SuitePayload, decryptBlob, and the KEM stream path all
+// reject it (spec/format-v1.md § "0x03 — pq-hybrid", M6).
+test('pq-hybrid stream decrypt: combinedKey mode rejects non-zero reserved classical_wrapped pad', async () => {
+  const { publicKey } = generateMlKemKeypair()
+  const envelopeKey = randomBytes(32)
+  const plaintext = randomBytes(200)
+  const { ciphertext, combinedKey } = await encryptStreamPqHybridV1(
+    streamFrom(plaintext),
+    {
+      recipientPublicKey: publicKey,
+      envelopeKey,
+      plaintextSize: plaintext.length,
+      chunkSize: 64,
+    },
+  )
+  // Flip the first byte of the reserved pad (after the 48-byte secretbox
+  // inside classical_wrapped) and re-authenticate the header.
+  const forged = await reforgeSuitePayload(
+    await drain(ciphertext),
+    combinedKey,
+    (suitePayload) => {
+      suitePayload[ML_KEM_1024_CIPHERTEXT_BYTES + 48] = 0x41
+      return suitePayload
+    },
+  )
+  await assert.rejects(
+    () => drain(decryptStreamPqHybridV1(streamFrom(forged), { combinedKey })),
+    /reserved classical_wrapped pad must be zero/,
+  )
+})
+
+test('pq-hybrid stream encrypt: rejects a suite payload with a non-zero reserved pad', async () => {
+  const { publicKey } = generateMlKemKeypair()
+  const envelopeKey = randomBytes(32)
+  const fileId = randomBytes(16)
+  const enc = await encapsulateForRecipient({
+    recipientPublicKey: publicKey,
+    envelopeKey,
+    fileId,
+  })
+  const suitePayload = enc.suitePayload.slice()
+  suitePayload[ML_KEM_1024_CIPHERTEXT_BYTES + 48] = 0x41
+  assert.throws(
+    () =>
+      createPqHybridV1EncryptStream({
+        plaintextSize: 10,
+        combinedKey: enc.combinedKey,
+        fileId,
+        suitePayload,
+      }),
+    /reserved classical_wrapped pad must be zero/,
   )
 })
