@@ -3,14 +3,28 @@
  *
  * The v1 file format already authenticates with HMAC under the content
  * key (`header_mac`) and per-chunk AEAD tags, so a recipient can be sure
- * the file decrypts to bytes the encryptor produced. What it does NOT
- * tell them is WHO encrypted it — anyone with the content key could have
- * written the file.
+ * the file decrypts to bytes *some* content-key holder produced. What it
+ * does NOT tell them is WHO produced it — anyone with the content key
+ * could have written the file.
  *
- * This module adds an optional detached signature over
- * `header_unauthenticated_bytes || concat(per-chunk MAC tags)` so that a
+ * This module adds an optional detached Ed25519 signature so that a
  * recipient who trusts a sender's public key can verify authorship. The
- * signature lives in an optional trailing structure (see
+ * signed message is a domain-separated, length-framed SHA-256 transcript
+ * that commits to the header AND every chunk's full ciphertext (body +
+ * AEAD tag) — see {@link SenderSigTranscript}.
+ *
+ * It deliberately does NOT sign the AEAD tags alone. An AEAD tag (GHASH
+ * for AES-GCM, Poly1305 for the PQ suite) is a keyed polynomial MAC that
+ * a *content-key holder* can forge: knowing the key, they can rewrite
+ * chunk ciphertext while holding the 16-byte tag byte-identical. Since
+ * the entire point of attribution is to bind content against exactly such
+ * a holder (an outsider without the content key cannot decrypt at all),
+ * the signature must commit to the ciphertext bytes themselves, not to a
+ * value the holder can keep fixed under a chosen-plaintext change. The
+ * transcript is hashed incrementally, so signing/verifying stays O(1) in
+ * memory for multi-gigabyte streams.
+ *
+ * The signature lives in an optional trailing structure (see
  * `spec/format-v1.md § "Signature block"`); legacy files without that
  * structure continue to decrypt unchanged, with the receiving side
  * reporting `signature: null`.
@@ -21,11 +35,13 @@
  */
 
 import { ed25519 } from '@noble/curves/ed25519.js'
+import { sha256 } from '@noble/hashes/sha2.js'
 
 import {
   concatBytes,
   readUint16BE,
   uint16BE,
+  uint64BE,
 } from '../internal/encoding.js'
 
 /** Signature algorithm: Ed25519 (RFC 8032). 32-byte key, 64-byte signature. */
@@ -56,65 +72,127 @@ export class SignatureError extends Error {
   }
 }
 
-function buildSignedMessage(
-  header: Uint8Array,
-  chunkMacs: ReadonlyArray<Uint8Array>,
-): Uint8Array {
-  let totalMacLen = 0
-  for (const mac of chunkMacs) totalMacLen += mac.length
-  const out = new Uint8Array(header.length + totalMacLen)
-  out.set(header, 0)
-  let offset = header.length
-  for (const mac of chunkMacs) {
-    out.set(mac, offset)
-    offset += mac.length
+/**
+ * Domain separator for the sender-attribution signature transcript.
+ *
+ * Frozen wire constant: these exact bytes are hashed into every
+ * signature. Changing them changes every signature and invalidates
+ * verification of any previously signed file. Do not edit.
+ */
+const SENDER_SIG_DOMAIN = new TextEncoder().encode(
+  'shieldfive/crypto/v1/sender-sig',
+)
+
+/**
+ * Incremental transcript for the sender-attribution signature.
+ *
+ * The signed message commits to the file header (exactly the bytes under
+ * `header_mac`) and to EVERY chunk's full ciphertext field (body + AEAD
+ * tag), each length-framed and preceded by a domain separator:
+ *
+ * ```
+ * digest = SHA-256(
+ *     SENDER_SIG_DOMAIN
+ *  || u64be(len(header)) || header
+ *  || u64be(total_chunks)
+ *  || for each chunk i in order: u64be(i) || u64be(len(ct_i)) || ct_i
+ * )
+ * ```
+ *
+ * The 32-byte digest is what Ed25519 signs. Because the transcript binds
+ * the ciphertext bytes (not just the malleable per-chunk AEAD tags), a
+ * content-key holder cannot alter plaintext while keeping a signature
+ * valid: any change to a ciphertext byte changes the digest, and forging
+ * an Ed25519 signature over the new digest requires the signing key.
+ * Length-framing the chunk index and each ciphertext also binds chunk
+ * order and count, so truncation/reorder/splice change the digest too.
+ *
+ * Only the running SHA-256 state is retained, never the ciphertext, so
+ * signing or verifying a multi-gigabyte file uses O(1) memory.
+ */
+export class SenderSigTranscript {
+  private readonly hash = sha256.create()
+  private headerAbsorbed = false
+
+  constructor() {
+    this.hash.update(SENDER_SIG_DOMAIN)
   }
-  return out
+
+  /**
+   * Absorb the header and the total chunk count. MUST be called exactly
+   * once, before any chunk. `header` MUST be the exact bytes covered by
+   * `header_mac` (`buildHeaderUnauthenticated` output /
+   * `parseHeader().unauthenticatedBytes`).
+   */
+  absorbHeader(header: Uint8Array, totalChunks: number): void {
+    if (this.headerAbsorbed) {
+      throw new SignatureError('transcript_header_already_absorbed')
+    }
+    this.hash.update(uint64BE(header.length))
+    this.hash.update(header)
+    this.hash.update(uint64BE(totalChunks))
+    this.headerAbsorbed = true
+  }
+
+  /**
+   * Absorb one chunk's FULL ciphertext field (body + tag), in chunk-index
+   * order. The index and length are framed alongside the bytes so
+   * reordering or splicing a chunk changes the digest.
+   */
+  absorbChunk(chunkIndex: number, ciphertext: Uint8Array): void {
+    if (!this.headerAbsorbed) {
+      throw new SignatureError('transcript_header_not_absorbed')
+    }
+    this.hash.update(uint64BE(chunkIndex))
+    this.hash.update(uint64BE(ciphertext.length))
+    this.hash.update(ciphertext)
+  }
+
+  /** Finalize and return the 32-byte transcript digest. Single-use. */
+  digest(): Uint8Array {
+    if (!this.headerAbsorbed) {
+      throw new SignatureError('transcript_header_not_absorbed')
+    }
+    return this.hash.digest()
+  }
 }
 
 /**
- * Produce a detached Ed25519 signature over
- * `header_unauthenticated_bytes || concat(chunk_macs)`.
- *
- * `header` MUST be the exact bytes covered by the file's `header_mac`
- * (i.e. the output of `buildHeaderUnauthenticated` or
- * `parseHeader().unauthenticatedBytes`). `chunkMacs` MUST be the per-chunk
- * AEAD tags in chunk-index order. For suites defined in v1 (AES-GCM-128,
- * ChaCha20-Poly1305) the tag is the trailing 16 bytes of the chunk's
- * ciphertext field.
+ * Produce a detached Ed25519 signature over a {@link SenderSigTranscript}
+ * digest (see the class docstring for the transcript definition).
  *
  * Returns the raw 64-byte signature. Callers wrap it in a signature block
  * via `buildSignatureBlock`.
  */
-export function signHeaderAndMacs(input: {
+export function signSenderTranscript(input: {
   ed25519SecretKey: Uint8Array
-  header: Uint8Array
-  chunkMacs: ReadonlyArray<Uint8Array>
+  transcriptDigest: Uint8Array
 }): Uint8Array {
   if (input.ed25519SecretKey.length !== ED25519_SECRET_KEY_LENGTH) {
     throw new SignatureError('ed25519_secret_key_wrong_length')
   }
-  const message = buildSignedMessage(input.header, input.chunkMacs)
-  return ed25519.sign(message, input.ed25519SecretKey)
+  return ed25519.sign(input.transcriptDigest, input.ed25519SecretKey)
 }
 
 /**
- * Verify a detached Ed25519 signature produced by `signHeaderAndMacs`.
+ * Verify a detached Ed25519 signature produced by `signSenderTranscript`.
  * Returns `true` on success, `false` on any failure (wrong length,
  * malformed point, bad signature). Never throws on a verification
  * mismatch — failures are not exceptional.
  */
-export function verifyHeaderAndMacs(input: {
+export function verifySenderTranscript(input: {
   ed25519PublicKey: Uint8Array
-  header: Uint8Array
-  chunkMacs: ReadonlyArray<Uint8Array>
+  transcriptDigest: Uint8Array
   signature: Uint8Array
 }): boolean {
   if (input.ed25519PublicKey.length !== ED25519_PUBLIC_KEY_LENGTH) return false
   if (input.signature.length !== ED25519_SIGNATURE_LENGTH) return false
-  const message = buildSignedMessage(input.header, input.chunkMacs)
   try {
-    return ed25519.verify(input.signature, message, input.ed25519PublicKey)
+    return ed25519.verify(
+      input.signature,
+      input.transcriptDigest,
+      input.ed25519PublicKey,
+    )
   } catch {
     // Malformed pubkey or sig encoding — noble throws; we treat as not-verified.
     return false

@@ -55,8 +55,9 @@ import {
   buildSignatureBlock,
   deriveEd25519PublicKey,
   ED25519_SECRET_KEY_LENGTH,
+  SenderSigTranscript,
   SIGNATURE_ALGO_ED25519,
-  signHeaderAndMacs,
+  signSenderTranscript,
 } from '../identity/sign.js'
 import {
   type DecryptionMetadata,
@@ -99,9 +100,10 @@ export interface PqHybridV1EncryptStreamOptions {
   suitePayload: Uint8Array
   /**
    * Optional 32-byte Ed25519 secret seed. When provided, the stream
-   * appends a signature block over `header_unauthenticated_bytes ||
-   * concat(chunk_macs)` after the final chunk. When omitted, no block
-   * is emitted and the file decrypts as unsigned (legacy behavior).
+   * appends a signature block after the final chunk, signing a transcript
+   * that commits to the header and every chunk's full ciphertext (see
+   * {@link SenderSigTranscript}). When omitted, no block is emitted and
+   * the file decrypts as unsigned (legacy behavior).
    */
   ed25519SecretKey?: Uint8Array
 }
@@ -192,15 +194,14 @@ export function createPqHybridV1EncryptStream(
   //   - chunk index counter
   //   - bytes consumed counter (for sanity check vs plaintextSize)
   //   - context (lazily initialized)
-  //   - unauthenticated header bytes (kept for signing)
-  //   - per-chunk MAC tags (last 16 bytes of each chunk ciphertext)
+  //   - signature transcript (present only when signing): commits to the
+  //     header and every chunk's full ciphertext, hashed incrementally
   let pending = new Uint8Array(0)
   let chunkIndex = 0
   let bytesConsumed = 0
   let contextPromise: ReturnType<typeof createChunkContext> | null = null
   let headerEmitted = false
-  let unauthenticatedHeader: Uint8Array | null = null
-  const chunkMacs: Uint8Array[] = []
+  const transcript = ed25519SecretKey ? new SenderSigTranscript() : null
 
   async function ensureHeader(
     controller: TransformStreamDefaultController<Uint8Array>,
@@ -216,7 +217,7 @@ export function createPqHybridV1EncryptStream(
     })
     const macKey = await deriveHeaderMacKey(combinedKey, fileId)
     const mac = await hmacSha256(macKey, unauth)
-    unauthenticatedHeader = unauth
+    transcript?.absorbHeader(unauth, totalChunks)
     controller.enqueue(concatBytes([unauth, mac]))
     headerEmitted = true
   }
@@ -232,9 +233,9 @@ export function createPqHybridV1EncryptStream(
     const ct = await encryptChunk(ctx, chunkIndex, plaintext)
     controller.enqueue(uint32BE(ct.length))
     controller.enqueue(ct)
-    if (ed25519SecretKey) {
-      chunkMacs.push(ct.slice(ct.length - PQ_HYBRID_V1_TAG_BYTES))
-    }
+    // Commit the FULL chunk ciphertext (body + tag) to the signature
+    // transcript, not just the malleable Poly1305 tag.
+    transcript?.absorbChunk(chunkIndex, ct)
     chunkIndex += 1
   }
 
@@ -290,16 +291,15 @@ export function createPqHybridV1EncryptStream(
         return
       }
       if (ed25519SecretKey) {
-        if (!unauthenticatedHeader) {
+        if (!transcript) {
           controller.error(
-            new Error('encrypt stream: header not finalized before signing'),
+            new Error('encrypt stream: signature transcript not initialized'),
           )
           return
         }
-        const signature = signHeaderAndMacs({
+        const signature = signSenderTranscript({
           ed25519SecretKey,
-          header: unauthenticatedHeader,
-          chunkMacs,
+          transcriptDigest: transcript.digest(),
         })
         const publicKey = deriveEd25519PublicKey(ed25519SecretKey)
         controller.enqueue(
@@ -436,7 +436,9 @@ export function createPqHybridV1DecryptStream(
   let bytesEmitted = 0
   let nextCipherLen = -1
   let contextPromise: ReturnType<typeof createChunkContext> | null = null
-  const chunkMacs: Uint8Array[] = []
+  // Rebuilds the signer's transcript as chunks arrive so a trailing
+  // signature block can be verified against the actual ciphertext.
+  const transcript = new SenderSigTranscript()
 
   function append(input: Uint8Array): void {
     const merged = new Uint8Array(buffer.length + input.length)
@@ -522,6 +524,11 @@ export function createPqHybridV1DecryptStream(
       parsePqHybridV1SuitePayload(parsedHeader.suitePayload)
     }
 
+    transcript.absorbHeader(
+      parsedHeader.unauthenticatedBytes,
+      parsedHeader.totalChunks,
+    )
+
     contextPromise = createChunkContext(
       combinedKey,
       parsedHeader.fileId,
@@ -568,7 +575,9 @@ export function createPqHybridV1DecryptStream(
     const pt = await decryptChunk(ctx, chunkIndex, ctBytes)
     bytesEmitted += pt.length
     controller.enqueue(pt)
-    chunkMacs.push(ctBytes.slice(ctBytes.length - PQ_HYBRID_V1_TAG_BYTES))
+    // Commit the FULL chunk ciphertext (body + tag) to the transcript for
+    // optional signature verification at flush time.
+    transcript.absorbChunk(chunkIndex, ctBytes)
     chunkIndex += 1
     return true
   }
@@ -612,8 +621,7 @@ export function createPqHybridV1DecryptStream(
           }
           const signatureResult = finalizeSignatureMetadata({
             trailingBytes: buffer,
-            header: parsedHeader.unauthenticatedBytes,
-            chunkMacs,
+            transcriptDigest: transcript.digest(),
             expectedSignerPublicKey,
           })
           buffer = new Uint8Array(0)
