@@ -5,6 +5,40 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Security
+
+- **Sender-attribution signatures now commit to ciphertext content, not just
+  AEAD tags.** The optional Ed25519 signature block previously signed
+  `header_unauthenticated_bytes || concat(per-chunk AEAD tags)`. Because an
+  AEAD tag (GHASH / Poly1305) is forgeable by a holder of the content key, a
+  recipient/collaborator could rewrite chunk ciphertext while keeping every
+  tag byte-identical, so `decrypt` returned attacker-modified plaintext while
+  `metadata.signature.verified` stayed `true` — a sender-attribution bypass
+  affecting both the `aes-256-gcm-v1` and `pq-hybrid-xchacha-mlkem1024-v1`
+  stream suites. Reported via the bug bounty program (Mudit Raj). The signed
+  message is now the SHA-256 digest of a domain-separated, length-framed
+  transcript over the header and **every chunk's full ciphertext** (see
+  `spec/format-v1.md § "Signature block"`), hashed incrementally so signing
+  stays O(1) in memory. `verified: true` now means the signer signed exactly
+  the ciphertext presented.
+
+  **Breaking (signature profile only):** this redefines what algorithm `0x01`
+  signs. Signatures produced by earlier versions no longer verify (they are
+  reported `verified: false`, fail-closed). Unsigned/legacy files are
+  unaffected and decrypt unchanged (`signature: null`); confidentiality,
+  `header_mac`, and per-chunk AEAD integrity are unchanged. The signing
+  feature was optional and unused by any production deployment, so no
+  interoperable signed files exist under the old transcript.
+
+### Changed
+
+- `src/identity/sign.ts`: removed `signHeaderAndMacs` / `verifyHeaderAndMacs`
+  (which signed the tag-only transcript); added `SenderSigTranscript`,
+  `signSenderTranscript`, and `verifySenderTranscript`. New direct dependency
+  on `@noble/hashes` for the incremental SHA-256 transcript.
+
 ## 1.0.0-beta.3 — 2026-07-02
 
 > Re-release of `1.0.0-beta.2` through the tag-triggered CI pipeline so the

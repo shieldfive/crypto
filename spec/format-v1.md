@@ -429,12 +429,22 @@ the wrapped key from the out-of-band channel.
 ## Signature block
 
 The signature block is an OPTIONAL trailing structure that carries a
-detached sender signature over `header_unauthenticated_bytes ||
-concat(per-chunk MAC tags)`. It provides *sender attribution*: a
-recipient who trusts a sender's public key can verify the file was
-produced by that sender. It does NOT add confidentiality or chunk
-integrity — those are provided by the per-suite AEAD and by
-`header_mac` regardless of whether a signature block is present.
+detached sender signature over a transcript that commits to the header
+and every chunk's full ciphertext (see `signed_message` below). It
+provides *sender attribution*: a recipient who trusts a sender's public
+key can verify the file content was produced by that sender. It does NOT
+add confidentiality — that is provided by the per-suite AEAD regardless
+of whether a signature block is present.
+
+The transcript commits to the ciphertext bytes themselves, not to the
+per-chunk AEAD tags. This is deliberate: an AEAD tag (GHASH for AES-GCM,
+Poly1305 for the PQ suite) is a keyed polynomial authenticator that a
+holder of the content key can forge — they can rewrite ciphertext while
+keeping the 16-byte tag byte-identical. Signing only the tags would let
+such a holder alter the plaintext other recipients see while the
+signature still verified, defeating attribution against exactly the
+principal it is meant to bind. Signing the ciphertext under a
+collision-resistant hash closes that gap.
 
 ```
 signature_block := algorithm        (1 byte)  = signature algorithm identifier
@@ -453,19 +463,34 @@ signature_block := algorithm        (1 byte)  = signature algorithm identifier
 | `0x02` | ML-DSA-65     | 1952 bytes | 3309 bytes | reserved (not yet implemented) |
 | `0x80` | (reserved, custom-algorithm range begins) | — | — | reserved |
 
-The message signed for `0x01 = Ed25519` is the byte string
+The message signed for `0x01 = Ed25519` is the 32-byte SHA-256 digest of
+a domain-separated, length-framed transcript:
 
 ```
-signed_message := header_unauthenticated_bytes
-               || concat(chunk_0_mac, chunk_1_mac, ..., chunk_{n-1}_mac)
+signed_message := SHA-256(
+      "shieldfive/crypto/v1/sender-sig"           (31-byte ASCII domain tag)
+   || u64be(len(header_unauthenticated_bytes)) || header_unauthenticated_bytes
+   || u64be(total_chunks)
+   || for each chunk i in 0..total_chunks-1:
+          u64be(i) || u64be(len(ciphertext_i)) || ciphertext_i
+)
 ```
 
 where `header_unauthenticated_bytes` is exactly the bytes covered by
 `header_mac` (i.e. everything in the header before the `header_mac`
-field itself), and each `chunk_i_mac` is the suite's AEAD authenticator
-tag for chunk `i`. For all suites defined in this version the AEAD tag
-is the trailing 16 bytes of the chunk's ciphertext field (AES-GCM-128
-and Poly1305 both append a 16-byte tag).
+field itself); `u64be(x)` is `x` as an 8-byte big-endian integer; the
+domain tag is the 31 ASCII bytes `shieldfive/crypto/v1/sender-sig` with
+no trailing byte; and `ciphertext_i` is the ENTIRE
+per-chunk ciphertext field for chunk `i` (encrypted body followed by the
+16-byte AEAD tag) — the same bytes the chunk's length prefix counts, not
+just the trailing tag. Ed25519 signs the resulting 32-byte digest.
+Framing every length as `u64be` and binding each chunk index means the
+transcript also commits to chunk count and order, so truncation,
+reordering, or splicing changes the digest.
+
+Because the transcript is hashed incrementally, a writer or reader never
+holds more than one chunk plus the running hash state in memory,
+regardless of file size.
 
 The signature block is OPTIONAL. Implementations:
 
@@ -486,10 +511,27 @@ The signature block is OPTIONAL. Implementations:
   without raising and lets the application policy decide.
 
 A signature block does not weaken the format's existing security
-guarantees: an attacker who tampers with any byte covered by `header_mac`
-fails MAC verification under the content key, and an attacker who
-tampers with any chunk ciphertext fails per-chunk AEAD verification. The
-signature is a separate, application-level trust layer.
+guarantees against an attacker WITHOUT the content key: tampering with
+any byte covered by `header_mac` fails MAC verification under the content
+key, and tampering with any chunk ciphertext fails per-chunk AEAD
+verification. The signature is a separate trust layer that additionally
+binds authorship against a content-key HOLDER: because the signed
+transcript commits to the ciphertext bytes, a recipient who has the
+content key (and could therefore forge an AEAD tag) still cannot alter
+the plaintext other recipients see without invalidating the signature.
+Verification with a caller-supplied public key returns `verified = true`
+only when the signer signed exactly the ciphertext presented.
+
+> Security note. Before this revision the signed transcript was
+> `header_unauthenticated_bytes || concat(per-chunk AEAD tags)`. Because
+> AEAD tags are forgeable by a content-key holder, that transcript did
+> not bind ciphertext content and did not provide attribution against a
+> recipient/collaborator. Any `0x01` signature produced by a library
+> version predating this revision therefore does not carry the
+> attribution guarantee and will not verify against the current
+> transcript. The signature block is optional and was not consumed by any
+> production ShieldFive deployment, so no interoperable signed files exist
+> under the old transcript.
 
 ## Versioning policy
 

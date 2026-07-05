@@ -37,8 +37,9 @@ export {
   buildSignatureBlock,
   deriveEd25519PublicKey,
   parseSignatureBlock,
-  signHeaderAndMacs,
-  verifyHeaderAndMacs,
+  SenderSigTranscript,
+  signSenderTranscript,
+  verifySenderTranscript,
 } from './sign.js'
 export type { SignatureBlock } from './sign.js'
 import {
