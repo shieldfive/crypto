@@ -137,8 +137,12 @@ holding, please cite the specific paragraph.
 
 ## Acknowledgements
 
-(This list will be populated as reports come in. Researchers are credited
-with their consent.)
+With thanks to the researchers who have reported findings in good faith
+(listed with their consent):
+
+- **0xEr3n** ([x.com/0xEr3n](https://x.com/0xEr3n)) — reader-validation
+  consistency hardening in the Suite 0x03 combined-key stream decrypt
+  path (Low / defense-in-depth; fixed in 1.0.0-beta.3).
 
 ---
 
