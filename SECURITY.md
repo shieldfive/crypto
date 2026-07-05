@@ -31,12 +31,27 @@ follow up over an encrypted channel.
 
 ## Our commitments
 
-| Severity                      | Acknowledgement | Initial response | Patch target |
-| ----------------------------- | :-------------: | :--------------: | :----------: |
-| Critical (key recovery, RCE)  |    24 hours     |     48 hours     |   7 days     |
-| High (integrity bypass)       |    48 hours     |     5 days       |   14 days    |
-| Medium (DoS, info leakage)    |    72 hours     |     7 days       |   30 days    |
-| Low (defense-in-depth)        |    7 days       |     14 days      |   90 days    |
+These windows match the public program at
+<https://shieldfive.com/security/bug-bounty>, which is the canonical
+source; if the two ever differ, the public program governs. They reflect
+the realistic capacity of a small team, not aspiration; we will explain
+any slippage in writing.
+
+| Step                  | Commitment      |
+| --------------------- | --------------- |
+| Acknowledge receipt   | within 72 hours |
+| Initial triage reply  | within 7 days   |
+| Critical patch target | 14 days         |
+| High patch target     | 30 days         |
+| Medium patch target   | 90 days         |
+| Low / informational   | best effort     |
+
+Severity is assigned by the impact described in
+[`spec/threat-model.md`](spec/threat-model.md): Critical = plaintext or
+key recovery, or RCE; High = integrity bypass that returns mutated
+plaintext as if authentic; Medium = exploitable implementation error or
+spec-vs-implementation drift with security implications; Low =
+defense-in-depth. We explain our severity assignment in every reply.
 
 We will:
 
@@ -127,4 +142,4 @@ with their consent.)
 
 ---
 
-Last updated: v1.0.0-beta.3
+Last updated: 2026-07-05
