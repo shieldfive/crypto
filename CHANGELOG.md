@@ -38,6 +38,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (which signed the tag-only transcript); added `SenderSigTranscript`,
   `signSenderTranscript`, and `verifySenderTranscript`. New direct dependency
   on `@noble/hashes` for the incremental SHA-256 transcript.
+- `src/suites/pq-hybrid-v1/index.ts`: `decapsulateFromHeader` now folds a
+  failed classical unwrap into a single generic `decapsulate: unwrap failed`
+  error (catching the libsodium secretbox throw) and removes a previously
+  unreachable `if (!classicalShare)` guard. No behavior change on the happy
+  path. Hardening from a coordinated-disclosure report noting the throw-vs-no-
+  throw distinguishability between a wrong `envelopeKey` and a bad ML-KEM
+  ciphertext; not a reachable oracle in any shipped path (share recipients
+  take the `combinedKey` branch and bypass this function, and `envelopeKey`
+  is the owner's own client-side key).
+
+### Documentation
+
+- `spec/threat-model.md` and `spec/key-derivation.md`: corrected the claim
+  that the crypto layer "enforces fresh per-file content keys." The library
+  **defaults** to fresh `content_key`/`file_id` per file but cannot enforce
+  uniqueness when a caller supplies both overrides; pair-uniqueness across
+  distinct plaintexts is a caller obligation, documented as such. Added a
+  SECURITY note to the `contentKey`/`fileId` override params in the
+  `aes-gcm-v1` and `xchacha-v1` encrypt options. From a coordinated-disclosure
+  report on AEAD nonce reuse under caller-supplied key reuse (not reachable on
+  the default path or in the shipped application, which always uses fresh
+  material per file).
 
 ## 1.0.0-beta.3 — 2026-07-02
 

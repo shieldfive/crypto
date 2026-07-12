@@ -43,9 +43,22 @@ const LENGTH_PREFIX_BYTES = 4
 
 export interface EncryptOptions {
   blob: Blob
-  /** Optional pre-existing content key (32 bytes). If omitted, generated. */
+  /**
+   * Optional pre-existing content key (32 bytes). If omitted, generated fresh.
+   *
+   * SECURITY: `contentKey` and `fileId` together form a one-use AEAD nonce
+   * namespace. Supplying BOTH overrides transfers the uniqueness obligation to
+   * the caller — reusing the same (contentKey, fileId) pair across two
+   * different plaintexts reuses the AEAD key and nonce and is catastrophic
+   * (enables plaintext recovery and authenticated chunk substitution). Never
+   * reuse a pair. Omitting both (the default) generates fresh material per file.
+   */
   contentKey?: Uint8Array
-  /** Optional pre-existing file_id (16 bytes). If omitted, generated. */
+  /**
+   * Optional pre-existing file_id (16 bytes). If omitted, generated fresh.
+   * See the SECURITY note on `contentKey` — do not reuse a (contentKey, fileId)
+   * pair across different plaintexts.
+   */
   fileId?: Uint8Array
   /** Optional embedded wrapped key + IV (60 + 12 bytes). Defaults to zeros. */
   suitePayloadOverride?: Uint8Array

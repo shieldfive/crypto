@@ -37,7 +37,16 @@ const LENGTH_PREFIX_BYTES = 4
 
 export interface XChaChaEncryptOptions {
   blob: Blob
+  /**
+   * SECURITY: `contentKey` and `fileId` together form a one-use AEAD nonce
+   * namespace. Supplying BOTH overrides transfers the uniqueness obligation to
+   * the caller — reusing the same (contentKey, fileId) pair across two
+   * different plaintexts reuses the AEAD key and nonce and is catastrophic
+   * (enables plaintext recovery and authenticated chunk substitution). Never
+   * reuse a pair. Omitting both (the default) generates fresh material per file.
+   */
   contentKey?: Uint8Array
+  /** See the SECURITY note on `contentKey`. */
   fileId?: Uint8Array
   suitePayloadOverride?: Uint8Array
   chunkSize?: number

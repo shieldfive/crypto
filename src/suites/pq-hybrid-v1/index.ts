@@ -332,15 +332,21 @@ export async function decapsulateFromHeader(options: {
     recipientSecretKey,
   )
 
-  // 2) Classical unwrap.
+  // 2) Classical unwrap. libsodium-wrappers THROWS on Poly1305 MAC failure
+  // (it does not return false), so the previous `if (!classicalShare)` guard
+  // was unreachable dead code. Catch the throw and re-raise a single generic
+  // error, folding the classical-unwrap failure into one message instead of
+  // surfacing libsodium's internal "wrong secret key" string to the caller.
   const wrapped48 = parsed.classicalWrapped.slice(0, 48)
-  const classicalShare = sodium.crypto_secretbox_open_easy(
-    wrapped48,
-    parsed.classicalNonce,
-    envelopeKey,
-  )
-  if (!classicalShare) {
-    throw new Error('decapsulate: classical unwrap failed')
+  let classicalShare: Uint8Array
+  try {
+    classicalShare = sodium.crypto_secretbox_open_easy(
+      wrapped48,
+      parsed.classicalNonce,
+      envelopeKey,
+    )
+  } catch {
+    throw new Error('decapsulate: unwrap failed')
   }
 
   // 3) Combine.

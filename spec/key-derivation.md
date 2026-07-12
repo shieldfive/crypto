@@ -80,8 +80,8 @@ backup) has a worse failure mode (data loss).
 Once the envelope key is in hand, per-file keys are derived as:
 
 ```
-content_key      = randomBytes(32)         (fresh per file, never derived)
-file_id          = randomBytes(16)         (fresh per file, never derived)
+content_key      = randomBytes(32)         (default path: fresh per file)
+file_id          = randomBytes(16)         (default path: fresh per file)
 
 header_mac_key   = HKDF(content_key, salt=file_id,
                         info="shieldfive/v1/header-mac")
@@ -97,6 +97,13 @@ iv / nonce_i     = nonce_prefix || counter
                    (counter = uint32_be(chunk_index) for aes-gcm-v2's
                     8-byte prefix; uint64_be(chunk_index) otherwise)
 ```
+
+Both `content_key` and `file_id` are generated fresh per file on the normal
+path. The high-level and streaming encrypt APIs also accept them as explicit
+overrides; when both are supplied the library cannot detect reuse, so
+uniqueness of the `(content_key, file_id)` pair across distinct plaintexts
+becomes the caller's responsibility. Reusing a pair reuses the AEAD key and
+nonce and is catastrophic (see `threat-model.md`, known limitations).
 
 For the PQ-hybrid suite, `content_key` is replaced by the combined key
 `K = HKDF(classical_share || pq_share, salt=file_id,

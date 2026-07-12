@@ -225,8 +225,14 @@ These are intentional tradeoffs documented for transparency:
 1. **Per-file random nonce prefix is derived, not stored.** Under correct
    use this is safer (no risk of replay due to RNG failure during write).
    Under incorrect use (key reuse across files), it offers no defense
-   beyond what AES-GCM/XChaCha already provide. This is acceptable because
-   the crypto layer enforces fresh per-file content keys.
+   beyond what AES-GCM/XChaCha already provide. On the normal path the
+   library generates a fresh `content_key` and `file_id` per file, so this
+   does not arise. The library does not, however, *enforce* uniqueness when
+   a caller supplies both the `contentKey` and `fileId` overrides: it cannot
+   tell that an explicitly supplied pair is being reused. Pair-uniqueness
+   across distinct plaintexts is therefore a caller obligation whenever the
+   override parameters are used; reusing a `(content_key, file_id)` pair is
+   catastrophic (AEAD key + nonce reuse). See `key-derivation.md`.
 
 2. **No padding for size obfuscation.** A 5MB ciphertext implies a ~5MB
    plaintext (within chunk granularity). Applications wanting size privacy
