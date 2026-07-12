@@ -18,7 +18,9 @@ import {
   encryptBytes,
 } from '../../src/suites/pq-hybrid-v1/api.js'
 import {
+  decapsulateFromHeader,
   deriveMlKemKeypair,
+  encapsulateForRecipient,
   generateMlKemKeypair,
   ML_KEM_1024_PUBLIC_KEY_BYTES,
   ML_KEM_1024_SECRET_KEY_BYTES,
@@ -136,6 +138,39 @@ test('pq-hybrid-v1: rejects wrong envelope key', async () => {
       recipientSecretKey: secretKey,
       envelopeKey: wrongEnvelope,
     }),
+  )
+})
+
+// Regression for the coordinated-disclosure hardening: decapsulateFromHeader
+// must fold a failed classical unwrap into one generic error (rather than
+// surfacing libsodium's internal "wrong secret key" string), and the happy
+// path must still recover the combined key.
+test('pq-hybrid-v1: decapsulateFromHeader folds a wrong envelope key into a generic error', async () => {
+  const { publicKey, secretKey } = generateMlKemKeypair()
+  const envelopeKey = randomBytes(32)
+  const wrongEnvelope = randomBytes(32)
+  const fileId = randomBytes(16)
+  const { suitePayload, combinedKey } = await encapsulateForRecipient({
+    recipientPublicKey: publicKey,
+    envelopeKey,
+    fileId,
+  })
+  const ok = await decapsulateFromHeader({
+    suitePayload,
+    recipientSecretKey: secretKey,
+    envelopeKey,
+    fileId,
+  })
+  assert.ok(bytesEqual(ok.combinedKey, combinedKey))
+  await assert.rejects(
+    () =>
+      decapsulateFromHeader({
+        suitePayload,
+        recipientSecretKey: secretKey,
+        envelopeKey: wrongEnvelope,
+        fileId,
+      }),
+    /unwrap failed/,
   )
 })
 

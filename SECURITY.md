@@ -140,6 +140,11 @@ holding, please cite the specific paragraph.
 With thanks to the researchers who have reported findings in good faith
 (listed with their consent):
 
+- **Mudit Raj** — the optional v1 sender-attribution signature committed
+  only to the per-chunk AEAD tags, not the ciphertext, letting a content-key
+  holder rewrite chunk ciphertext while `signature.verified` stayed `true`
+  (a sender-attribution bypass affecting both stream suites; High). Fixed by
+  signing a ciphertext-committing SHA-256 transcript (see CHANGELOG).
 - **0xEr3n** ([x.com/0xEr3n](https://x.com/0xEr3n)) — reader-validation
   consistency hardening in the Suite 0x03 combined-key stream decrypt
   path (Low / defense-in-depth; fixed in 1.0.0-beta.3).
