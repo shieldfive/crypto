@@ -114,8 +114,12 @@ const plaintext = await decryptBlob({
 
 ### Encrypt with the WebCrypto-only suite (no WASM dependency)
 
+Use `aes-gcm-v2` — the current AES-GCM **write** path (also WASM-free). The
+`aes-gcm-v1` subpath is decrypt-only for files written before `v2` existed;
+don't write new files with it.
+
 ```ts
-import { encryptBlob, decryptBlob } from '@shieldfive/crypto/aes-gcm-v1'
+import { encryptBlob, decryptBlob } from '@shieldfive/crypto/aes-gcm-v2'
 
 const result = await encryptBlob({ blob: file })
 // result.contentKey is your 32-byte fresh per-file key — store it wrapped

@@ -69,12 +69,26 @@ jobs:
 
       - name: Resolve version and verify it matches the tag
         id: ver
+        env:
+          # Untrusted input (workflow_dispatch ref / pushed tag name) is passed
+          # via env and never interpolated into the shell — git ref names permit
+          # `$()`, backticks, `;`, `|`, `&`, so a `${{ ... }}` interpolation here
+          # is a command-injection sink in the job that holds NPM_TOKEN and
+          # id-token:write. Mirrors dist-tag.yml. (Security audit SF-01, 2026-07.)
+          TAG_REF: ${{ github.event.inputs.ref || github.ref_name }}
         run: |
           PKG_VERSION="$(node -p "require('./package.json').version")"
-          TAG_REF="${{ github.event.inputs.ref || github.ref_name }}"
           TAG_VERSION="${TAG_REF#v}"
+          # Defense in depth: reject any version that is not a clean semver
+          # string, so no shell metacharacters can flow from package.json into
+          # the later `${{ steps.ver.outputs.version }}` uses (npm view / publish).
+          semver_re='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
+          if [[ ! "$PKG_VERSION" =~ $semver_re ]]; then
+            echo "::error::package.json version is not a clean semver string"
+            exit 1
+          fi
           if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
-            echo "::error::Tag $TAG_REF (=$TAG_VERSION) does not match package.json version $PKG_VERSION"
+            echo "::error::Tag (=$TAG_VERSION) does not match package.json version $PKG_VERSION"
             exit 1
           fi
           echo "version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
