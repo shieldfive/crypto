@@ -4,24 +4,39 @@
 > cipher-suite-agile on-disk format. The cryptographic core of
 > [ShieldFive](https://shieldfive.com), released as a standalone library.
 
+[![npm](https://img.shields.io/npm/v/@shieldfive/crypto?logo=npm&color=cb3837)](https://www.npmjs.com/package/@shieldfive/crypto)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-188%2F188-brightgreen.svg)](tests/)
+[![npm provenance](https://img.shields.io/badge/npm-provenance-blue?logo=npm)](https://www.npmjs.com/package/@shieldfive/crypto)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/shieldfive/crypto/badge)](https://securityscorecards.dev/viewer/?uri=github.com/shieldfive/crypto)
 [![Status](https://img.shields.io/badge/status-beta-yellow.svg)](#status)
+<!-- Once registered at https://www.bestpractices.dev, add the earned badge:
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/<ID>/badge)](https://www.bestpractices.dev/projects/<ID>) -->
+
 
 ## Status & honest scope
 
-This library is **beta**. The wire format is frozen for the v1 release;
-the public TypeScript API may make minor adjustments before v1.0.0 stable.
-It has **not** undergone external cryptographic audit. Until it does,
-treat this library as a serious work-in-progress rather than a finished
-product.
+This library is **beta**, and "beta" here means one specific thing: the
+public TypeScript API may still make minor adjustments before `1.0.0`. The
+v1 **wire format is frozen** — files written today will decrypt on every
+future v1 release. Leaving beta is an *API-stability* decision; `1.0.0`
+means the API is stable under semantic versioning, **not** that the code
+has been audited. Those are two separate axes and we track them separately
+(see [Status](#status)).
+
+**Audit status:** this library has **not** received a paid third-party
+cryptographic audit, and `1.0.0` will not claim one. An external audit is
+on the roadmap (we are pursuing grant-funded options); it is not a
+prerequisite for leaving beta. [Status](#status) states exactly what has
+and has not been reviewed, and what you can verify yourself without
+trusting us.
 
 The design choices documented in [`spec/`](spec/) are deliberate and
 reviewable. The implementation is covered by 188 passing tests including
 truncation, reordering, splice, and tampering detection across all four
-suites. That is enough for internal dogfooding. It is **not** enough to
-claim "most secure crypto library" — that claim requires external review
-this library has not yet received.
+suites. That is enough for internal dogfooding and for building on with
+eyes open. It is **not** enough to claim "most secure crypto library" —
+that claim requires external review this library has not yet received.
 
 When this library says it avoids a parallel cryptographic implementation,
 that scope is the file-content cipher suites. The keyring/envelope layer
@@ -251,12 +266,38 @@ Requires Node 20+.
 
 ## Status
 
-**Beta.** The wire format is frozen for the v1 release, but the public
-TypeScript API may make small adjustments before 1.0.0 stable. Test
-coverage is comprehensive (188 tests, all four suites, all architectural
-guarantees verified). A formal third-party security audit is planned for
-the 1.0.0 stable milestone — until that audit lands, treat this library
-as a serious work-in-progress rather than a finished product.
+**Beta — API stabilizing, format frozen.** This section tracks two
+independent axes; please don't conflate them.
+
+**API stability.** The v1 wire format is frozen — files written today
+decrypt on every future v1 release. The public TypeScript API may make
+small adjustments before `1.0.0`. `1.0.0` means the API is stable under
+semantic versioning: breaking changes will require a major-version bump.
+It does **not** mean "audited."
+
+**Audit status (scoped to `v1.0.0-beta.4`).** `@shieldfive/crypto` has
+**not** had a paid third-party security audit. The novel part of the
+design — the post-quantum-hybrid KEM combiner
+`K = HKDF-SHA-256(classical_share ‖ ml_kem_share, salt = file_id)`
+(see [`spec/key-derivation.md`](spec/key-derivation.md)) — uses the same
+concatenation-KDF hybrid pattern as X-Wing and HPKE, but has not yet
+received external cryptographic review. An external audit is on the
+roadmap (grant-funded options are being pursued) and is **not** a
+prerequisite for leaving beta. When an audit lands it will be cited here
+with the firm, the date, and the exact commit/version reviewed — and this
+notice stays in place for any version that predates that review.
+
+**What you can verify without trusting us:**
+
+```bash
+npm audit signatures   # npm provenance: tarball ↔ this source commit + CI run
+npm test               # 188 tests incl. deterministic KATs (tests/vectors/)
+```
+
+Plus a published [threat model](spec/threat-model.md) with explicit
+non-goals, a complete [wire-format spec](spec/format-v1.md), and
+reproducible [test vectors](tests/vectors/vectors.json) any independent
+implementation can check against.
 
 ## License
 
@@ -283,8 +324,9 @@ in good faith are protected under the safe-harbor clause.
   audited by an external firm. ShieldFive's PQ-hybrid construction on
   top of the library — the HKDF-SHA-256 combiner that mixes the
   classical and ML-KEM shares — has also not received an independent
-  external audit. A third-party audit of the ShieldFive layer is
-  planned for the v1.0.0 stable milestone.
+  external audit. A third-party audit of the ShieldFive layer is on the
+  roadmap (see [Status](#status)); it is tracked separately from, and is
+  not a prerequisite for, the `1.0.0` API-stability milestone.
 - [libsodium](https://github.com/jedisct1/libsodium) — XChaCha20-Poly1305
   and XSalsa20-Poly1305 secretbox.
 - The NIST PQC competition and FIPS 203 authors.
