@@ -5,6 +5,24 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed (non-breaking API consistency)
+
+- Suite option types now use one convention: `xchacha-v1` and `pq-hybrid-v1`
+  export `EncryptOptions` / `DecryptOptions` (previously `XChaCha*` / `PqHybrid*`
+  prefixed), matching `aes-gcm-v1` / `aes-gcm-v2`. No consumer referenced the old
+  prefixed type names.
+- `encryptBytes` now accepts `Uint8Array | ArrayBuffer` in every suite
+  (previously `xchacha-v1` / `pq-hybrid-v1` accepted only `Uint8Array`).
+  Widening only — existing calls are unaffected.
+- Progress callbacks use the exported `ProgressCallback` type consistently
+  across `autoDecryptBlob` and the legacy-v0 reader (type-identical).
+
+The public umbrella surface — including `parseHeader`, the header builders,
+`identity`, and `migrationV0` — is intentionally unchanged; those remain stable
+top-level exports that downstream consumers depend on.
+
 ## 1.0.0-beta.4 — 2026-07-13
 
 ### Security

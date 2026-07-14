@@ -103,7 +103,7 @@ export * as migrationV0 from './migration/v0-bridge.js'
 // Auto-routing decryptor
 // ──────────────────────────────────────────────────────────────────────
 import { parseHeader, HeaderError } from './format/header.js'
-import { SUITE, type SuiteId } from './internal/types.js'
+import { SUITE, type SuiteId, type ProgressCallback } from './internal/types.js'
 import * as aes from './suites/aes-gcm-v1/api.js'
 import * as aesV2 from './suites/aes-gcm-v2/api.js'
 import * as xchacha from './suites/xchacha-v1/api.js'
@@ -118,7 +118,7 @@ export interface AutoDecryptOptions {
   /** Required for PQ-hybrid: classical 32-byte envelope key */
   envelopeKey?: Uint8Array
   /** Optional progress callback (0..1) */
-  onProgress?: (progress: number) => void
+  onProgress?: ProgressCallback
 }
 
 /**
