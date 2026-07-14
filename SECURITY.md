@@ -31,11 +31,8 @@ follow up over an encrypted channel.
 
 ## Our commitments
 
-These windows match the public program at
-<https://shieldfive.com/security/bug-bounty>, which is the canonical
-source; if the two ever differ, the public program governs. They reflect
-the realistic capacity of a small team, not aspiration; we will explain
-any slippage in writing.
+These windows reflect the realistic capacity of a small team, not
+aspiration; we will explain any slippage in writing.
 
 | Step                  | Commitment      |
 | --------------------- | --------------- |
@@ -67,7 +64,7 @@ We will *not*:
 
 - Take legal action against researchers acting in good faith (see
   Safe Harbor below).
-- Demand silence as a condition of bounty or credit.
+- Demand silence as a condition of credit.
 
 ## Safe Harbor
 
@@ -90,21 +87,14 @@ and we will not initiate legal action against you. If a third party
 initiates legal action against you for activities conducted under this
 policy, we will make this authorization clear.
 
-## Bug bounty
+## Recognition
 
-ShieldFive operates a paid bug bounty program covering this
-open-source crypto library. Reward tiers:
-
-- Critical: up to €1000
-- High: up to €500
-- Medium: up to €250
-
-Lower-impact findings receive public credit (CVE, release notes,
-dedicated thank-you page) and product credits.
-
-For current scope, rules of engagement, submission instructions,
-and the safe-harbor statement, see
-https://shieldfive.com/security/bug-bounty.
+`@shieldfive/crypto` does **not** currently operate a paid bug-bounty
+program. We still want to hear about vulnerabilities, and we recognize
+valid reports with public credit — a CVE where appropriate, attribution in
+the release notes, and a place in the acknowledgements below — with your
+consent, or anonymously if you prefer. Coordinated disclosure and the
+safe-harbor terms above apply to every report.
 
 ## Out of scope
 
@@ -151,4 +141,4 @@ With thanks to the researchers who have reported findings in good faith
 
 ---
 
-Last updated: 2026-07-05
+Last updated: 2026-07-14
