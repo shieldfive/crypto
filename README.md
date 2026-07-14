@@ -6,7 +6,7 @@
 
 [![npm](https://img.shields.io/npm/v/@shieldfive/crypto?logo=npm&color=cb3837)](https://www.npmjs.com/package/@shieldfive/crypto)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-188%2F188-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-259%2F259-brightgreen.svg)](tests/)
 [![npm provenance](https://img.shields.io/badge/npm-provenance-blue?logo=npm)](https://www.npmjs.com/package/@shieldfive/crypto)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/shieldfive/crypto/badge)](https://securityscorecards.dev/viewer/?uri=github.com/shieldfive/crypto)
 [![Status](https://img.shields.io/badge/status-beta-yellow.svg)](#status)
@@ -32,7 +32,7 @@ and has not been reviewed, and what you can verify yourself without
 trusting us.
 
 The design choices documented in [`spec/`](spec/) are deliberate and
-reviewable. The implementation is covered by 188 passing tests including
+reviewable. The implementation is covered by 259 passing tests including
 truncation, reordering, splice, and tampering detection across all four
 suites. That is enough for internal dogfooding and for building on with
 eyes open. It is **not** enough to claim "most secure crypto library" —
@@ -295,8 +295,17 @@ notice stays in place for any version that predates that review.
 
 ```bash
 npm audit signatures   # npm provenance: tarball ↔ this source commit + CI run
-npm test               # 188 tests incl. deterministic KATs (tests/vectors/)
+npm test               # 259 tests incl. deterministic KATs + adversarial vectors
 ```
+
+The [`tests/vectors/`](tests/vectors/) directory publishes reproducible vectors
+any independent implementation can check against: **positive** known-answer
+vectors ([`vectors.json`](tests/vectors/vectors.json)) that a conforming
+implementation must reproduce bit-for-bit, and **negative / adversarial** vectors
+([`adversarial-vectors.json`](tests/vectors/adversarial-vectors.json)) — tampered
+files a conforming decoder MUST reject (bad magic, suite confusion, header/chunk
+tampering, reordering, truncation, cross-file splice), each self-checked against
+this implementation at generation time.
 
 Plus a published [threat model](spec/threat-model.md) with explicit
 non-goals, a complete [wire-format spec](spec/format-v1.md), and

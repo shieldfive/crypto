@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Published **negative / adversarial test vectors**
+  (`tests/vectors/adversarial-vectors.json`): tampered v1 files that a conforming
+  decoder MUST reject — bad magic, unknown/confused suite, reserved flags,
+  header-field and header-MAC tampering, chunk ciphertext/tag/framing tampering,
+  reordering, truncation, and cross-file splice — across all four suites, each
+  with a valid control. Generated and self-checked by
+  `tests/vectors/generate-adversarial.ts` and enforced by
+  `tests/vectors/adversarial-vectors.test.ts`. Companion to the existing positive
+  known-answer vectors; lets independent implementations verify the format's
+  misuse-resistance guarantees, not just its happy path.
+
 ### Changed (non-breaking API consistency)
 
 - Suite option types now use one convention: `xchacha-v1` and `pq-hybrid-v1`
