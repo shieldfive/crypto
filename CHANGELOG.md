@@ -5,7 +5,13 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 1.0.0-rc.1 — 2026-07-14
+
+Release candidate for `1.0.0`. The v1 wire format and the public TypeScript API
+are frozen; `1.0.0` follows once the RC has soaked. Not externally audited (see
+README "Status"); an internal multi-agent review shipped and its findings are
+fixed. No wire-format changes — every file written by a `1.0.0-*` release
+decrypts identically.
 
 ### Added
 

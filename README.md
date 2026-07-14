@@ -9,27 +9,26 @@
 [![Tests](https://img.shields.io/badge/tests-259%2F259-brightgreen.svg)](tests/)
 [![npm provenance](https://img.shields.io/badge/npm-provenance-blue?logo=npm)](https://www.npmjs.com/package/@shieldfive/crypto)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/shieldfive/crypto/badge)](https://securityscorecards.dev/viewer/?uri=github.com/shieldfive/crypto)
-[![Status](https://img.shields.io/badge/status-beta-yellow.svg)](#status)
+[![Status](https://img.shields.io/badge/status-1.0.0--rc.1-blue.svg)](#status)
 <!-- Once registered at https://www.bestpractices.dev, add the earned badge:
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/<ID>/badge)](https://www.bestpractices.dev/projects/<ID>) -->
 
 
 ## Status & honest scope
 
-This library is **beta**, and "beta" here means one specific thing: the
-public TypeScript API may still make minor adjustments before `1.0.0`. The
-v1 **wire format is frozen** — files written today will decrypt on every
-future v1 release. Leaving beta is an *API-stability* decision; `1.0.0`
-means the API is stable under semantic versioning, **not** that the code
-has been audited. Those are two separate axes and we track them separately
-(see [Status](#status)).
+This library is a **release candidate** (`1.0.0-rc.1`). The v1 **wire format
+is frozen** — files written today will decrypt on every future v1 release —
+and the public TypeScript API is now stable; `1.0.0` follows once the RC has
+soaked. `1.0.0` means the API is stable under semantic versioning, **not**
+that the code has been audited. Those are two separate axes and we track them
+separately (see [Status](#status)).
 
 **Audit status:** this library has **not** received a paid third-party
-cryptographic audit, and `1.0.0` will not claim one. An external audit is
-on the roadmap (we are pursuing grant-funded options); it is not a
-prerequisite for leaving beta. [Status](#status) states exactly what has
-and has not been reviewed, and what you can verify yourself without
-trusting us.
+cryptographic audit, and `1.0.0` will not claim one. It has had an internal
+multi-agent review (findings fixed) and publishes reproducible positive and
+adversarial test vectors; an external audit is on the roadmap (we are pursuing
+grant-funded options). [Status](#status) states exactly what has and has not
+been reviewed, and what you can verify yourself without trusting us.
 
 The design choices documented in [`spec/`](spec/) are deliberate and
 reviewable. The implementation is covered by 259 passing tests including
@@ -270,16 +269,15 @@ Requires Node 20+.
 
 ## Status
 
-**Beta — API stabilizing, format frozen.** This section tracks two
-independent axes; please don't conflate them.
+**Release candidate (`1.0.0-rc.1`) — API frozen, format frozen.** This
+section tracks two independent axes; please don't conflate them.
 
 **API stability.** The v1 wire format is frozen — files written today
-decrypt on every future v1 release. The public TypeScript API may make
-small adjustments before `1.0.0`. `1.0.0` means the API is stable under
-semantic versioning: breaking changes will require a major-version bump.
-It does **not** mean "audited."
+decrypt on every future v1 release. The public TypeScript API is frozen for
+`1.0.0`; breaking changes will require a major-version bump. `1.0.0` means
+the API is stable under semantic versioning. It does **not** mean "audited."
 
-**Audit status (scoped to `v1.0.0-beta.4`).** `@shieldfive/crypto` has
+**Audit status (scoped to `v1.0.0-rc.1`).** `@shieldfive/crypto` has
 **not** had a paid third-party security audit. The novel part of the
 design — the post-quantum-hybrid KEM combiner
 `K = HKDF-SHA-256(classical_share ‖ ml_kem_share, salt = file_id)`
@@ -287,7 +285,7 @@ design — the post-quantum-hybrid KEM combiner
 concatenation-KDF hybrid pattern as X-Wing and HPKE, but has not yet
 received external cryptographic review. An external audit is on the
 roadmap (grant-funded options are being pursued) and is **not** a
-prerequisite for leaving beta. When an audit lands it will be cited here
+prerequisite for the `1.0.0` release. When an audit lands it will be cited here
 with the firm, the date, and the exact commit/version reviewed — and this
 notice stays in place for any version that predates that review.
 
