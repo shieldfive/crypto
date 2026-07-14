@@ -57,7 +57,7 @@ export {
 
 const LENGTH_PREFIX_BYTES = 4
 
-export interface PqHybridEncryptOptions {
+export interface EncryptOptions {
   blob: Blob
   /** Recipient's ML-KEM-1024 public key (1568 bytes) */
   recipientPublicKey: Uint8Array
@@ -82,7 +82,7 @@ export interface PqHybridEncryptOptions {
  * public key.
  */
 export async function encryptBlob(
-  options: PqHybridEncryptOptions,
+  options: EncryptOptions,
 ): Promise<EncryptedFile & { combinedKey: Uint8Array }> {
   const { blob, recipientPublicKey, envelopeKey, onProgress } = options
   if (!(blob instanceof Blob)) {
@@ -155,7 +155,7 @@ export async function encryptBlob(
   }
 }
 
-export interface PqHybridDecryptOptions {
+export interface DecryptOptions {
   blob: Blob
   /** Recipient's ML-KEM-1024 secret key (3168 bytes) */
   recipientSecretKey: Uint8Array
@@ -165,7 +165,7 @@ export interface PqHybridDecryptOptions {
 }
 
 export async function decryptBlob(
-  options: PqHybridDecryptOptions,
+  options: DecryptOptions,
 ): Promise<Blob> {
   const { blob, recipientSecretKey, envelopeKey, onProgress } = options
   if (!(blob instanceof Blob)) {
@@ -284,15 +284,17 @@ export async function decryptBlob(
  * public key.
  */
 export async function encryptBytes(
-  bytes: Uint8Array,
-  options: Omit<PqHybridEncryptOptions, 'blob'>,
+  bytes: Uint8Array | ArrayBuffer,
+  options: Omit<EncryptOptions, 'blob'>,
 ): Promise<EncryptedFile & { combinedKey: Uint8Array }> {
-  const blob = new Blob([asBlobPart(bytes)])
+  const part: BlobPart =
+    bytes instanceof ArrayBuffer ? bytes : asBlobPart(bytes)
+  const blob = new Blob([part])
   return encryptBlob({ blob, ...options })
 }
 
 export async function decryptToBytes(
-  options: PqHybridDecryptOptions,
+  options: DecryptOptions,
 ): Promise<Uint8Array> {
   const blob = await decryptBlob(options)
   return new Uint8Array(await blob.arrayBuffer())
