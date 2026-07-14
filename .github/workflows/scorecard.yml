@@ -1,0 +1,69 @@
+name: Scorecard supply-chain security
+
+# OpenSSF Scorecard (https://securityscorecards.dev) — an automated, neutral
+# 0–10 assessment of this repo's supply-chain hygiene (branch protection, pinned
+# actions, token permissions, dangerous workflows, dependency update tooling,
+# etc.). Results publish to the public OpenSSF API, which powers the Scorecard
+# badge in README.md and uploads findings to the repo's Security → Code scanning
+# tab. For a cryptography library this is a cheap, third-party (not self-claimed)
+# trust signal that complements npm provenance and the published test vectors.
+#
+# ── ONE-TIME SETUP ───────────────────────────────────────────────────────────
+#   1. Merge this workflow to the default branch (main) — publish_results only
+#      works from the default branch of a public repo.
+#   2. The badge in README.md
+#      (api.securityscorecards.dev/projects/github.com/shieldfive/crypto/badge)
+#      populates automatically after the first run on main.
+#   3. To raise the score, the two highest-leverage fixes are usually:
+#        - enable branch protection on main (Settings → Branches), and
+#        - pin third-party actions by commit SHA instead of tag (see note below).
+#
+# NOTE ON PINNING: to match the existing workflows this file pins actions by tag
+# (@v4 etc.). Scorecard's "Pinned-Dependencies" check rewards full 40-char commit
+# SHAs. Pinning every `uses:` in this repo to a SHA (with a `# vX.Y.Z` comment)
+# is the single change that most improves the score.
+
+on:
+  branch_protection_rule:
+  schedule:
+    - cron: '20 7 * * 1' # weekly, Mondays 07:20 UTC
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Read-only by default; the analysis job elevates only what it needs.
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write # upload SARIF to the code-scanning dashboard
+      id-token: write        # OIDC — publish results to the public OpenSSF API (badge)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        uses: ossf/scorecard-action@v2
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # Publishing is what makes the README badge and public viewer work.
+          # It requires this workflow to live on the default branch of a public repo.
+          publish_results: true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload SARIF to code-scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
