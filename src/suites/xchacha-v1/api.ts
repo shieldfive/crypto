@@ -35,7 +35,7 @@ import {
 
 const LENGTH_PREFIX_BYTES = 4
 
-export interface XChaChaEncryptOptions {
+export interface EncryptOptions {
   blob: Blob
   /**
    * SECURITY: `contentKey` and `fileId` together form a one-use AEAD nonce
@@ -54,7 +54,7 @@ export interface XChaChaEncryptOptions {
 }
 
 export async function encryptBlob(
-  options: XChaChaEncryptOptions,
+  options: EncryptOptions,
 ): Promise<EncryptedFile & { contentKey: Uint8Array }> {
   const { blob, onProgress } = options
   if (!(blob instanceof Blob)) {
@@ -132,7 +132,7 @@ export async function encryptBlob(
   }
 }
 
-export interface XChaChaDecryptOptions {
+export interface DecryptOptions {
   blob: Blob
   contentKey: Uint8Array
   onProgress?: ProgressCallback
@@ -140,7 +140,7 @@ export interface XChaChaDecryptOptions {
 }
 
 export async function decryptBlob(
-  options: XChaChaDecryptOptions,
+  options: DecryptOptions,
 ): Promise<Blob> {
   const { blob, contentKey, onProgress } = options
   if (!(blob instanceof Blob)) {
@@ -248,15 +248,17 @@ export async function decryptBlob(
 }
 
 export async function encryptBytes(
-  bytes: Uint8Array,
-  options: Omit<XChaChaEncryptOptions, 'blob'>,
+  bytes: Uint8Array | ArrayBuffer,
+  options: Omit<EncryptOptions, 'blob'>,
 ): Promise<EncryptedFile & { contentKey: Uint8Array }> {
-  const blob = new Blob([asBlobPart(bytes)])
+  const part: BlobPart =
+    bytes instanceof ArrayBuffer ? bytes : asBlobPart(bytes)
+  const blob = new Blob([part])
   return encryptBlob({ blob, ...options })
 }
 
 export async function decryptToBytes(
-  options: XChaChaDecryptOptions,
+  options: DecryptOptions,
 ): Promise<Uint8Array> {
   const blob = await decryptBlob(options)
   return new Uint8Array(await blob.arrayBuffer())

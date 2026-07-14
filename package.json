@@ -64,13 +64,9 @@
       "types": "./dist/kdf/argon2id.d.ts",
       "default": "./dist/kdf/argon2id.js"
     },
-    "./identity": {
+    "./unstable_identity": {
       "types": "./dist/identity/index.d.ts",
       "default": "./dist/identity/index.js"
-    },
-    "./migration/v0": {
-      "types": "./dist/migration/v0-bridge.d.ts",
-      "default": "./dist/migration/v0-bridge.js"
     },
     "./format": {
       "types": "./dist/format/header.d.ts",

@@ -30,7 +30,7 @@ import test from 'node:test'
 
 import sodium from 'libsodium-wrappers-sumo'
 import { bytesToBase64 } from '@shieldfive/crypto'
-import { createIdentity } from '@shieldfive/crypto/identity'
+import { createIdentity } from '@shieldfive/crypto/unstable_identity'
 import { encryptBlob as pqEncryptBlob } from '@shieldfive/crypto/pq-hybrid-v1'
 
 import {

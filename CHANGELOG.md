@@ -5,6 +5,50 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased — 1.0.0 API freeze (targeting 1.0.0-rc.1)
+
+Public-API surface changes made ahead of the `1.0.0` stability commitment.
+These are the only breaking changes planned before `1.0.0`; the wire format is
+unchanged and all files remain decryptable.
+
+### Breaking (public API surface)
+
+- **Suite option types renamed to a single convention.** `xchacha-v1` and
+  `pq-hybrid-v1` now export `EncryptOptions` / `DecryptOptions` (previously
+  `XChaChaEncryptOptions` / `XChaChaDecryptOptions` and `PqHybridEncryptOptions`
+  / `PqHybridDecryptOptions`), matching `aes-gcm-v1` / `aes-gcm-v2`. Import via
+  the suite subpath or the umbrella namespace (`xchachaV1.EncryptOptions`).
+- **`identity` subpath renamed to `unstable_identity`.** The identity, sharing,
+  and sender-signature surface is newer and not yet covered by the stability
+  promise; the `unstable_` prefix makes that explicit. Update imports from
+  `@shieldfive/crypto/identity` → `@shieldfive/crypto/unstable_identity`.
+- **`migration/v0` removed from the public API.** The v0 bridge can *write* the
+  legacy weak format and existed only for the ShieldFive internal migration. It
+  is no longer exported from `package.json`; it remains available to the
+  ShieldFive monorepo via a direct source import. Use a v1 suite for new files.
+- **Low-level header builders and runtime helpers moved behind `unstable`.**
+  `buildAuthenticatedHeader`, `buildHeaderUnauthenticated`, `buildChunkAad`,
+  `deriveHeaderMacKey`, `parseHeader`, `verifyHeaderMac`, `constantTimeEqual`,
+  `randomBytes`, and `zeroize` are no longer flat umbrella exports; access them
+  via the `unstable` namespace (`import { unstable } from '@shieldfive/crypto'`).
+  `HeaderError` and the format constants/types remain stable top-level exports.
+
+### Changed
+
+- `encryptBytes` now accepts `Uint8Array | ArrayBuffer` in every suite
+  (previously `xchacha-v1` / `pq-hybrid-v1` accepted only `Uint8Array`).
+  Widening only — existing calls are unaffected.
+- Progress callbacks now use the exported `ProgressCallback` type consistently
+  across `autoDecryptBlob` and the legacy-v0 reader (type-identical; no
+  behavior change).
+
+### Deferred
+
+- `finalizeSignatureMetadata` is still exported from `streams/aes-gcm-v1`; it is
+  an internal helper shared with the PQ-hybrid stream decoder and will be
+  relocated out of the public surface in a follow-up (it needs a careful move to
+  avoid a type-import cycle).
+
 ## 1.0.0-beta.4 — 2026-07-13
 
 ### Security

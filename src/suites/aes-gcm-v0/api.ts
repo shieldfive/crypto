@@ -16,6 +16,7 @@
 
 import { uint64BE } from '../../internal/encoding.js'
 import { getSubtle } from '../../internal/runtime.js'
+import { type ProgressCallback } from '../../internal/types.js'
 
 export const V0_TAG_BYTES = 16
 export const V0_IV_BYTES = 12
@@ -32,7 +33,7 @@ export interface V0DecryptOptions {
   /** Plaintext bytes per chunk (5 MiB or 8 MiB in production) */
   chunkSize: number
   /** Optional progress callback (0..1) */
-  onProgress?: (progress: number) => void
+  onProgress?: ProgressCallback
 }
 
 function buildIv(prefix: Uint8Array, counter: number): Uint8Array {

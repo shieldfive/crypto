@@ -17,17 +17,11 @@
  */
 
 // ──────────────────────────────────────────────────────────────────────
-// Format primitives
+// Format primitives (stable): the error class callers catch on parse
+// failure. The low-level header builder/parser functions are exposed under
+// `unstable` (below) and are NOT covered by the 1.0 stability promise.
 // ──────────────────────────────────────────────────────────────────────
-export {
-  buildAuthenticatedHeader,
-  buildChunkAad,
-  buildHeaderUnauthenticated,
-  deriveHeaderMacKey,
-  HeaderError,
-  parseHeader,
-  verifyHeaderMac,
-} from './format/header.js'
+export { HeaderError } from './format/header.js'
 
 // ──────────────────────────────────────────────────────────────────────
 // Type definitions and constants
@@ -66,13 +60,12 @@ export {
 } from './internal/encoding.js'
 
 // ──────────────────────────────────────────────────────────────────────
-// Runtime helpers
+// Unstable surface — NOT covered by the 1.0 semver stability promise.
+// Low-level header builders/parsers and runtime helpers. They may change or
+// be removed in any release (including minor/patch). Exposed for advanced
+// reimplementers only; application code should use the stable suite APIs.
 // ──────────────────────────────────────────────────────────────────────
-export {
-  constantTimeEqual,
-  randomBytes,
-  zeroize,
-} from './internal/runtime.js'
+export * as unstable from './unstable.js'
 
 // ──────────────────────────────────────────────────────────────────────
 // Re-export suite namespaces for direct consumption.
@@ -96,14 +89,19 @@ export * as pqHybridV1 from './suites/pq-hybrid-v1/api.js'
 export * as legacyV0 from './suites/aes-gcm-v0/api.js'
 export * as streamsAesGcmV1 from './streams/aes-gcm-v1.js'
 export * as kdfArgon2id from './kdf/argon2id.js'
-export * as identity from './identity/index.js'
-export * as migrationV0 from './migration/v0-bridge.js'
+// `unstable_identity`: user identity, sharing, and sender-signature helpers.
+// Prefixed `unstable_` because this surface is newer and not yet covered by
+// the 1.0 stability promise; it may change in a minor release.
+export * as unstable_identity from './identity/index.js'
+// NOTE: the v0 migration bridge (which can WRITE the legacy weak format) is
+// intentionally NOT part of the public API. It stays available to the
+// ShieldFive monorepo via a direct source import; see MIGRATION.md.
 
 // ──────────────────────────────────────────────────────────────────────
 // Auto-routing decryptor
 // ──────────────────────────────────────────────────────────────────────
 import { parseHeader, HeaderError } from './format/header.js'
-import { SUITE, type SuiteId } from './internal/types.js'
+import { SUITE, type SuiteId, type ProgressCallback } from './internal/types.js'
 import * as aes from './suites/aes-gcm-v1/api.js'
 import * as aesV2 from './suites/aes-gcm-v2/api.js'
 import * as xchacha from './suites/xchacha-v1/api.js'
@@ -118,7 +116,7 @@ export interface AutoDecryptOptions {
   /** Required for PQ-hybrid: classical 32-byte envelope key */
   envelopeKey?: Uint8Array
   /** Optional progress callback (0..1) */
-  onProgress?: (progress: number) => void
+  onProgress?: ProgressCallback
 }
 
 /**

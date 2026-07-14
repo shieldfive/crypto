@@ -50,7 +50,7 @@ import {
   bytesToBase64,
 } from '@shieldfive/crypto'
 import { deriveMasterSecret } from '@shieldfive/crypto/kdf/argon2id'
-import { createIdentity } from '@shieldfive/crypto/identity'
+import { createIdentity } from '@shieldfive/crypto/unstable_identity'
 import { decryptV0 } from '@shieldfive/crypto/legacy-v0'
 
 const subtle = webcrypto.subtle
