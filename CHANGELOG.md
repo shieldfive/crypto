@@ -5,6 +5,24 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.0.0-rc.3 — 2026-08-03
+
+No wire-format changes; suite `0x03` and the identity bundle are untouched. Adds
+firm key-bundle signing for the inbound-intake "Request documents" feature.
+
+### Added
+
+- **Firm key-bundle signing** in the `inbound` module. `deriveInboundSigningKeypair`
+  derives a deterministic Ed25519 identity keypair from the master secret;
+  `signInboundKeyBundle` signs the domain-separated, length-framed
+  `(ml_kem || x25519)` public-key bundle, and `verifyInboundKeyBundle` checks it.
+  This lets a guest detect a swapped firm key (the signature must verify against
+  the firm's out-of-band-trusted signing key) — it does not defeat a server that
+  also serves malicious verifying code (the honest-claim ceiling). Reuses the
+  audited Ed25519 primitives from `sign.ts`. Integration tests cover the
+  round trip and detection of a swapped ml_kem/x25519 key, a wrong signer, and a
+  tampered signature.
+
 ## 1.0.0-rc.2 — 2026-08-02
 
 No wire-format changes; every file written by a `1.0.0-*` release still decrypts

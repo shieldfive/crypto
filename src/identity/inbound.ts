@@ -28,8 +28,17 @@
  */
 
 import { x25519 } from '@noble/curves/ed25519.js'
+import { sha256 } from '@noble/hashes/sha2.js'
 
-import { concatBytes } from '../internal/encoding.js'
+import {
+  deriveEd25519PublicKey,
+  ED25519_PUBLIC_KEY_LENGTH,
+  ED25519_SECRET_KEY_LENGTH,
+  ED25519_SIGNATURE_LENGTH,
+  signSenderTranscript,
+  verifySenderTranscript,
+} from './sign.js'
+import { concatBytes, uint32BE } from '../internal/encoding.js'
 import { hkdfSha256 } from '../internal/hkdf.js'
 import { randomBytes } from '../internal/runtime.js'
 import { HEADER_SIZES, HKDF_INFO } from '../internal/types.js'
@@ -170,4 +179,112 @@ export async function openInboundEnvelopeKey(options: {
     fileId,
   )
   return { envelopeKey }
+}
+
+// ── Firm key-bundle signing ──────────────────────────────────────────────────
+//
+// The guest fetches the firm's ml_kem + x25519 public keys from a server it does
+// not trust. To detect a swapped key, the firm signs its published key bundle
+// with a long-lived Ed25519 identity key derived from the same master secret,
+// and the guest verifies the signature against the firm's published signing key
+// (whose fingerprint the firm communicates out of band). This raises the bar to
+// a firm-key forgery; it does not defeat a server that also serves malicious
+// verifying code (the honest-claim ceiling).
+
+/** Ed25519 signing public key length (bytes). */
+export const INBOUND_SIGNING_PUBLIC_KEY_LENGTH = ED25519_PUBLIC_KEY_LENGTH
+/** Ed25519 key-bundle signature length (bytes). */
+export const INBOUND_KEY_BUNDLE_SIGNATURE_LENGTH = ED25519_SIGNATURE_LENGTH
+
+const INBOUND_KEY_BUNDLE_DOMAIN = new TextEncoder().encode(
+  'shieldfive/v1/inbound/key-bundle',
+)
+
+export interface InboundSigningKeypair {
+  /** Ed25519 public key (32 bytes) — publish so guests can verify the bundle. */
+  ed25519PublicKey: Uint8Array
+  /** Ed25519 secret seed (32 bytes) — treat as highly sensitive. */
+  ed25519SecretKey: Uint8Array
+}
+
+/**
+ * Deterministically derive the firm's Ed25519 signing keypair from its master
+ * secret, mirroring the ML-KEM / X25519 derivations. Stable across devices.
+ */
+export async function deriveInboundSigningKeypair(
+  masterSecret: Uint8Array,
+): Promise<InboundSigningKeypair> {
+  if (masterSecret.length < 16) {
+    throw new RangeError(
+      'deriveInboundSigningKeypair: masterSecret must be at least 16 bytes',
+    )
+  }
+  const seed = await hkdfSha256({
+    ikm: masterSecret,
+    info: HKDF_INFO.INBOUND_SIGNING_SEED,
+    length: ED25519_SECRET_KEY_LENGTH,
+  })
+  const ed25519PublicKey = deriveEd25519PublicKey(seed)
+  return { ed25519PublicKey, ed25519SecretKey: seed }
+}
+
+/**
+ * Domain-separated, length-framed digest over the published key bundle. Framing
+ * the lengths prevents a (ml_kem, x25519) split from colliding with a different
+ * pairing.
+ */
+function inboundKeyBundleDigest(
+  mlKemPublicKey: Uint8Array,
+  x25519PublicKey: Uint8Array,
+): Uint8Array {
+  return sha256(
+    concatBytes([
+      INBOUND_KEY_BUNDLE_DOMAIN,
+      uint32BE(mlKemPublicKey.length),
+      mlKemPublicKey,
+      uint32BE(x25519PublicKey.length),
+      x25519PublicKey,
+    ]),
+  )
+}
+
+/**
+ * Sign the firm's published (ml_kem || x25519) bundle with its Ed25519 signing
+ * secret. Returns a raw 64-byte signature to store next to the keys.
+ */
+export function signInboundKeyBundle(options: {
+  ed25519SecretKey: Uint8Array
+  mlKemPublicKey: Uint8Array
+  x25519PublicKey: Uint8Array
+}): Uint8Array {
+  const digest = inboundKeyBundleDigest(
+    options.mlKemPublicKey,
+    options.x25519PublicKey,
+  )
+  return signSenderTranscript({
+    ed25519SecretKey: options.ed25519SecretKey,
+    transcriptDigest: digest,
+  })
+}
+
+/**
+ * Guest side: verify a firm key-bundle signature. Returns false on any failure
+ * (never throws). The guest must additionally trust the signing public key via
+ * an out-of-band fingerprint.
+ */
+export function verifyInboundKeyBundle(options: {
+  ed25519PublicKey: Uint8Array
+  mlKemPublicKey: Uint8Array
+  x25519PublicKey: Uint8Array
+  signature: Uint8Array
+}): boolean {
+  const digest = inboundKeyBundleDigest(
+    options.mlKemPublicKey,
+    options.x25519PublicKey,
+  )
+  return verifySenderTranscript({
+    ed25519PublicKey: options.ed25519PublicKey,
+    transcriptDigest: digest,
+    signature: options.signature,
+  })
 }
