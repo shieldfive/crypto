@@ -5,6 +5,25 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.0.0-rc.2 — 2026-08-02
+
+No wire-format changes; every file written by a `1.0.0-*` release still decrypts
+identically, and suite `0x03` is untouched. Adds a zero-knowledge inbound-intake
+key exchange for the "Request documents" feature.
+
+### Added
+
+- **Zero-knowledge inbound intake** (`inbound` module). An account-less sender
+  can encrypt a file to a recipient's published keys with no recipient secret,
+  and only the recipient can decrypt. The recipient publishes a static X25519
+  public key next to its ML-KEM-1024 key; the sender derives the suite-`0x03`
+  classical envelope key from an ephemeral-static X25519 ECDH, so the classical
+  share stays confidential under X25519 and the PQ share under ML-KEM — an
+  attacker must break both. Adds `deriveInboundStaticKeypair`,
+  `sealInboundEnvelopeKey`, and `openInboundEnvelopeKey`, plus two dedicated
+  HKDF labels. Integration tests cover the sender-to-recipient round trip and
+  that breaking either primitive alone fails closed.
+
 ## 1.0.0-rc.1 — 2026-07-14
 
 Release candidate for `1.0.0`. The v1 wire format and the public TypeScript API
