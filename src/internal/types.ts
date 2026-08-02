@@ -93,6 +93,15 @@ export const HKDF_INFO = Object.freeze({
   // label above, so a share transport key is never equal to a file's
   // combined key for the same (recipient, envelope, file_id).
   SHARE_TRANSPORT: 'shieldfive/v1/share-transport',
+  // Zero-knowledge inbound intake. An account-less sender derives the classical
+  // envelope key (the 32-byte input suite 0x03 already expects) from an
+  // ephemeral↔static X25519 ECDH against the recipient's published static key,
+  // so the classical share stays confidential under X25519 while the PQ share
+  // stays confidential under ML-KEM — a genuine break-both hybrid with no change
+  // to the frozen suite. These two labels are dedicated to that path and reused
+  // nowhere else.
+  INBOUND_X25519_STATIC_SEED: 'shieldfive/v1/inbound/x25519-static-seed',
+  INBOUND_ENVELOPE: 'shieldfive/v1/inbound/envelope-key',
   ARGON2ID_SALT_COMPRESSION: 'shieldfive/v1/argon2id/salt-compression',
 })
 
