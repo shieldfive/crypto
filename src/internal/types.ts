@@ -102,6 +102,9 @@ export const HKDF_INFO = Object.freeze({
   // nowhere else.
   INBOUND_X25519_STATIC_SEED: 'shieldfive/v1/inbound/x25519-static-seed',
   INBOUND_ENVELOPE: 'shieldfive/v1/inbound/envelope-key',
+  // Ed25519 identity signing key for inbound intake. The firm signs its
+  // published (ml_kem || x25519) bundle so a guest can detect a key swap.
+  INBOUND_SIGNING_SEED: 'shieldfive/v1/inbound/ed25519-signing-seed',
   ARGON2ID_SALT_COMPRESSION: 'shieldfive/v1/argon2id/salt-compression',
 })
 

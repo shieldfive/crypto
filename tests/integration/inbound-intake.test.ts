@@ -16,9 +16,12 @@ import test from 'node:test'
 import { decryptToBytes, encryptBytes } from '../../src/suites/pq-hybrid-v1/api.js'
 import { deriveMlKemKeypair } from '../../src/suites/pq-hybrid-v1/index.js'
 import {
+  deriveInboundSigningKeypair,
   deriveInboundStaticKeypair,
   openInboundEnvelopeKey,
   sealInboundEnvelopeKey,
+  signInboundKeyBundle,
+  verifyInboundKeyBundle,
 } from '../../src/identity/inbound.js'
 import { randomBytes } from '../../src/internal/runtime.js'
 
@@ -189,5 +192,97 @@ test('a substituted ephemeral public key cannot open the file', async () => {
       recipientSecretKey: mlKem.secretKey,
       envelopeKey: openedWrong.envelopeKey,
     }),
+  )
+})
+
+test('firm signing keypair is deterministic from the master secret', async () => {
+  const masterSecret = randomBytes(32)
+  const a = await deriveInboundSigningKeypair(masterSecret)
+  const b = await deriveInboundSigningKeypair(masterSecret)
+  assert.equal(a.ed25519PublicKey.length, 32)
+  assert.equal(a.ed25519SecretKey.length, 32)
+  assert.deepEqual(a.ed25519PublicKey, b.ed25519PublicKey)
+  const other = await deriveInboundSigningKeypair(randomBytes(32))
+  assert.notDeepEqual(a.ed25519PublicKey, other.ed25519PublicKey)
+})
+
+test('a firm can sign its key bundle and a guest verifies it', async () => {
+  const masterSecret = randomBytes(32)
+  const mlKem = await deriveMlKemKeypair(masterSecret)
+  const x = await deriveInboundStaticKeypair(masterSecret)
+  const signing = await deriveInboundSigningKeypair(masterSecret)
+
+  const signature = signInboundKeyBundle({
+    ed25519SecretKey: signing.ed25519SecretKey,
+    mlKemPublicKey: mlKem.publicKey,
+    x25519PublicKey: x.x25519PublicKey,
+  })
+  assert.equal(signature.length, 64)
+  assert.equal(
+    verifyInboundKeyBundle({
+      ed25519PublicKey: signing.ed25519PublicKey,
+      mlKemPublicKey: mlKem.publicKey,
+      x25519PublicKey: x.x25519PublicKey,
+      signature,
+    }),
+    true,
+  )
+})
+
+test('key-bundle signature detects a swapped key or a bad signer', async () => {
+  const masterSecret = randomBytes(32)
+  const mlKem = await deriveMlKemKeypair(masterSecret)
+  const x = await deriveInboundStaticKeypair(masterSecret)
+  const signing = await deriveInboundSigningKeypair(masterSecret)
+  const signature = signInboundKeyBundle({
+    ed25519SecretKey: signing.ed25519SecretKey,
+    mlKemPublicKey: mlKem.publicKey,
+    x25519PublicKey: x.x25519PublicKey,
+  })
+
+  // Attacker swaps the x25519 key.
+  const attackerX = await deriveInboundStaticKeypair(randomBytes(32))
+  assert.equal(
+    verifyInboundKeyBundle({
+      ed25519PublicKey: signing.ed25519PublicKey,
+      mlKemPublicKey: mlKem.publicKey,
+      x25519PublicKey: attackerX.x25519PublicKey,
+      signature,
+    }),
+    false,
+  )
+  // Attacker swaps the ML-KEM key.
+  const attackerMlKem = await deriveMlKemKeypair(randomBytes(32))
+  assert.equal(
+    verifyInboundKeyBundle({
+      ed25519PublicKey: signing.ed25519PublicKey,
+      mlKemPublicKey: attackerMlKem.publicKey,
+      x25519PublicKey: x.x25519PublicKey,
+      signature,
+    }),
+    false,
+  )
+  // Signature verified against a different signer.
+  const otherSigner = await deriveInboundSigningKeypair(randomBytes(32))
+  assert.equal(
+    verifyInboundKeyBundle({
+      ed25519PublicKey: otherSigner.ed25519PublicKey,
+      mlKemPublicKey: mlKem.publicKey,
+      x25519PublicKey: x.x25519PublicKey,
+      signature,
+    }),
+    false,
+  )
+  // Tampered signature byte.
+  const tampered = new Uint8Array(signature)
+  tampered[0] ^= 0x01
+  assert.equal(
+    verifyInboundKeyBundle({
+      ed25519PublicKey: signing.ed25519PublicKey,
+      mlKemPublicKey: mlKem.publicKey,
+      x25519PublicKey: x.x25519PublicKey,
+      signature: tampered,
+    }),
+    false,
   )
 })
