@@ -46,14 +46,20 @@ import {
   buildSignatureBlock,
   deriveEd25519PublicKey,
   ED25519_SECRET_KEY_LENGTH,
-  parseSignatureBlock,
   SenderSigTranscript,
   SIGNATURE_ALGO_ED25519,
   signSenderTranscript,
-  type SignatureBlock,
-  SignatureError,
-  verifySenderTranscript,
 } from '../identity/sign.js'
+import {
+  finalizeSignatureMetadata,
+  type DecryptionMetadata,
+} from '../format/signature-tail.js'
+
+// Re-exported so `streams/aes-gcm-v1.js` stays the import site these
+// symbols have always had (the PQ-hybrid stream and public barrels
+// import them from here).
+export { finalizeSignatureMetadata }
+export type { DecryptionMetadata, VerifiedSignature } from '../format/signature-tail.js'
 
 const LENGTH_PREFIX_BYTES = 4
 
@@ -295,27 +301,11 @@ export interface AesGcmV1DecryptStreamOptions {
   expectedSignerPublicKey?: Uint8Array
 }
 
-/**
- * Verified signature metadata surfaced by the decrypt stream.
- *
- * - `algorithm`, `publicKey`, `signature` come from the parsed block.
- * - `verified` is `true` if the caller passed `expectedSignerPublicKey`
- *   AND it matched the embedded pubkey AND the signature verifies; it
- *   is `false` if the check ran and failed; it is `null` if the caller
- *   passed no `expectedSignerPublicKey` (the application policy layer
- *   is expected to do its own verification using the surfaced bytes).
- */
-export interface VerifiedSignature {
-  algorithm: number
-  publicKey: Uint8Array
-  signature: Uint8Array
-  verified: boolean | null
-}
-
-export interface DecryptionMetadata {
-  /** Null when the file has no signature block (legacy / unsigned). */
-  signature: VerifiedSignature | null
-}
+// `VerifiedSignature` and `DecryptionMetadata` (and the shared
+// `finalizeSignatureMetadata` helper) now live in
+// `../format/signature-tail.js` so the whole-blob decryptors can reuse
+// the exact same tail semantics. They are re-exported below so existing
+// import paths (`streams/aes-gcm-v1.js`) keep working unchanged.
 
 export interface AesGcmV1DecryptStreamResult {
   stream: TransformStream<Uint8Array, Uint8Array>
@@ -598,69 +588,5 @@ export function decryptStreamAesGcmV1(
   }
 }
 
-/**
- * Parse a trailing signature block (if any) from the decrypt stream's
- * residual buffer, optionally verifying it against the caller's
- * trusted public key.
- *
- * `transcriptDigest` is the {@link SenderSigTranscript} digest rebuilt
- * over the header and every chunk's full ciphertext as it was decrypted,
- * so `verified: true` means the signer signed exactly these bytes.
- *
- * Shared between the AES-GCM and PQ-hybrid stream decoders so the
- * signature semantics live in one place.
- */
-export function finalizeSignatureMetadata(input: {
-  trailingBytes: Uint8Array
-  transcriptDigest: Uint8Array
-  expectedSignerPublicKey: Uint8Array | undefined
-}): VerifiedSignature | null {
-  if (input.trailingBytes.length === 0) {
-    return null
-  }
-  let parsed: { block: SignatureBlock; consumed: number }
-  try {
-    parsed = parseSignatureBlock(input.trailingBytes, 0)
-  } catch (err) {
-    if (err instanceof SignatureError) {
-      throw new HeaderError(`signature_block_${err.code}`)
-    }
-    throw err
-  }
-  if (parsed.consumed !== input.trailingBytes.length) {
-    throw new HeaderError('trailing_bytes_after_signature_block')
-  }
-  const { algorithm, publicKey, signature } = parsed.block
-
-  let verified: boolean | null = null
-  if (input.expectedSignerPublicKey) {
-    if (algorithm !== SIGNATURE_ALGO_ED25519) {
-      // Unknown / unsupported algorithm: cannot verify with our
-      // Ed25519-only verifier; treat as a verification failure under
-      // the caller's policy (they asked us to verify, we couldn't).
-      verified = false
-    } else {
-      // Pubkey-pinning: if the embedded pubkey doesn't match the caller's
-      // expected one, fail without doing the (still-honest) Ed25519
-      // math. This keeps the "verified=true" contract tight: it means
-      // the file was signed by the key the caller expected.
-      verified =
-        bytesEqualConstantTime(publicKey, input.expectedSignerPublicKey) &&
-        verifySenderTranscript({
-          ed25519PublicKey: input.expectedSignerPublicKey,
-          transcriptDigest: input.transcriptDigest,
-          signature,
-        })
-    }
-  }
-  return { algorithm, publicKey, signature, verified }
-}
-
-function bytesEqualConstantTime(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false
-  let diff = 0
-  for (let i = 0; i < a.length; i += 1) {
-    diff |= a[i]! ^ b[i]!
-  }
-  return diff === 0
-}
+// `finalizeSignatureMetadata` moved to `../format/signature-tail.js`
+// (re-exported above) so the whole-blob decryptors share it.
