@@ -96,6 +96,7 @@
     "clean": "rm -rf dist",
     "lint": "eslint src tests",
     "pretest": "npm run build",
+    "version": "node scripts/sync-version.mjs && git add src/index.ts",
     "test": "node --experimental-vm-modules --test --import tsx tests/**/*.test.ts",
     "test:unit": "node --experimental-vm-modules --test --import tsx tests/unit/*.test.ts",
     "test:integration": "node --experimental-vm-modules --test --import tsx tests/integration/*.test.ts",
