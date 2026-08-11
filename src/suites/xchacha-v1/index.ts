@@ -52,6 +52,14 @@ export function parseXChaChaV1SuitePayload(
   if (bytes.length !== XCHACHA_V1_SUITE_PAYLOAD_LENGTH) {
     throw new RangeError('xchacha-v1: suite payload must be 96 bytes')
   }
+  // The 48-byte secretbox wrap (32-byte key + 16-byte tag) is zero-padded to
+  // 72 bytes; the reserved pad (bytes 48..72) MUST be all zero — same
+  // invariant suite 0x03 enforces (M6). See parseAesGcmV1SuitePayload.
+  for (let i = 48; i < 72; i += 1) {
+    if (bytes[i] !== 0) {
+      throw new RangeError('xchacha-v1: reserved wrapped_key pad must be zero')
+    }
+  }
   return {
     wrappedKey: bytes.slice(0, 72),
     wrapNonce: bytes.slice(72, 96),

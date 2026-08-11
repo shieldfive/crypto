@@ -54,6 +54,13 @@ export function parseAesGcmV2SuitePayload(
   if (bytes.length !== AES_GCM_V2_SUITE_PAYLOAD_LENGTH) {
     throw new RangeError('aes-gcm-v2: suite payload must be 72 bytes')
   }
+  // Reserved pad after the 48-byte wrap (bytes 48..60) MUST be all zero —
+  // same invariant suite 0x03 enforces (M6). See parseAesGcmV1SuitePayload.
+  for (let i = 48; i < 60; i += 1) {
+    if (bytes[i] !== 0) {
+      throw new RangeError('aes-gcm-v2: reserved wrapped_key pad must be zero')
+    }
+  }
   return {
     wrappedKey: bytes.slice(0, 60),
     wrapIv: bytes.slice(60, 72),
