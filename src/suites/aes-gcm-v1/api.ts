@@ -38,6 +38,11 @@ import {
   readUint32BE,
   uint32BE,
 } from '../../internal/encoding.js'
+import { SenderSigTranscript } from '../../identity/sign.js'
+import {
+  finalizeSignatureMetadata,
+  type VerifiedSignature,
+} from '../../format/signature-tail.js'
 
 const LENGTH_PREFIX_BYTES = 4
 
@@ -165,6 +170,23 @@ export interface DecryptOptions {
    * an explicit allowlist.
    */
   allowedSuites?: ReadonlyArray<number>
+  /**
+   * If provided, a trailing sender-attribution signature block (if
+   * present) is verified against this Ed25519 public key, and the result
+   * is surfaced via `onSignature` with `verified` set accordingly. If
+   * omitted, a present block is still parsed and surfaced but not
+   * verified (`verified: null`). See `spec/format-v1.md § "Signature
+   * block"`. Reaches parity with the streaming decoder.
+   */
+  expectedSignerPublicKey?: Uint8Array
+  /**
+   * Called once, after the plaintext is fully decrypted, with the file's
+   * sender-attribution signature — or `null` for a legacy/unsigned file.
+   * Callers that require attribution MUST gate on
+   * `signature?.verified === true`; a `null` signature or any other
+   * `verified` value means the plaintext is unattributed.
+   */
+  onSignature?: (signature: VerifiedSignature | null) => void
 }
 
 /**
@@ -231,6 +253,13 @@ export async function decryptBlob(options: DecryptOptions): Promise<Blob> {
     parsed.totalChunks,
   )
 
+  // Rebuild the sender-attribution transcript only when the caller wants
+  // to verify — otherwise a present block is still surfaced (verified:
+  // null) without paying for the extra hash over every ciphertext byte.
+  const expectedSignerPublicKey = options.expectedSignerPublicKey
+  const transcript = expectedSignerPublicKey ? new SenderSigTranscript() : null
+  transcript?.absorbHeader(parsed.unauthenticatedBytes, parsed.totalChunks)
+
   const plaintextParts: BlobPart[] = []
   let cursor = parsed.headerLength
   let bytesEmitted = 0
@@ -269,18 +298,30 @@ export async function decryptBlob(options: DecryptOptions): Promise<Blob> {
     const plaintext = await decryptChunk(ctx, i, cipherBytes)
     bytesEmitted += plaintext.length
     plaintextParts.push(asBlobPart(plaintext))
+    transcript?.absorbChunk(i, cipherBytes)
 
     onProgress?.((i + 1) / Math.max(parsed.totalChunks, 1))
   }
 
-  // Final consistency: total bytes emitted must equal plaintextSize, and
-  // the file must have no trailing garbage past the last chunk.
+  // Total bytes emitted must equal plaintextSize.
   if (bytesEmitted !== parsed.plaintextSize) {
     throw new HeaderError('plaintext_size_mismatch')
   }
-  if (cursor !== blob.size) {
-    throw new HeaderError('trailing_bytes_after_last_chunk')
-  }
+
+  // Any bytes after the last chunk are an optional Ed25519 signature
+  // block (spec/format-v1.md § "Signature block"): parse and surface it,
+  // rejecting only malformed trailing garbage — instead of rejecting
+  // every signed file, which diverged from the streaming decoder.
+  const trailingBytes =
+    cursor < blob.size
+      ? new Uint8Array(await blob.slice(cursor).arrayBuffer())
+      : new Uint8Array(0)
+  const signature = finalizeSignatureMetadata({
+    trailingBytes,
+    transcriptDigest: transcript ? transcript.digest() : new Uint8Array(32),
+    expectedSignerPublicKey,
+  })
+  options.onSignature?.(signature)
 
   if (parsed.totalChunks === 0) onProgress?.(1)
 

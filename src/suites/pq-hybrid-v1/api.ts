@@ -40,6 +40,11 @@ import {
   uint32BE,
 } from '../../internal/encoding.js'
 import { randomBytes } from '../../internal/runtime.js'
+import { SenderSigTranscript } from '../../identity/sign.js'
+import {
+  finalizeSignatureMetadata,
+  type VerifiedSignature,
+} from '../../format/signature-tail.js'
 
 // Re-exports of suite primitives that are useful to callers outside the
 // streaming/whole-blob API surfaces. `decapsulateFromHeader` lets a
@@ -162,6 +167,22 @@ export interface DecryptOptions {
   /** Classical envelope key */
   envelopeKey: Uint8Array
   onProgress?: ProgressCallback
+  /**
+   * If provided, a trailing sender-attribution signature block (if
+   * present) is verified against this Ed25519 public key, and the result
+   * is surfaced via `onSignature` with `verified` set accordingly. If
+   * omitted, a present block is still parsed and surfaced but not
+   * verified (`verified: null`). See `spec/format-v1.md § "Signature
+   * block"`.
+   */
+  expectedSignerPublicKey?: Uint8Array
+  /**
+   * Called once, after the plaintext is fully decrypted, with the file's
+   * sender-attribution signature — or `null` for a legacy/unsigned file.
+   * Callers that require attribution MUST gate on
+   * `signature?.verified === true`.
+   */
+  onSignature?: (signature: VerifiedSignature | null) => void
 }
 
 export async function decryptBlob(
@@ -218,6 +239,12 @@ export async function decryptBlob(
     parsed.totalChunks,
   )
 
+  // Rebuild the sender-attribution transcript only when verifying, so an
+  // unsigned decrypt pays nothing for the extra hash over ciphertext.
+  const expectedSignerPublicKey = options.expectedSignerPublicKey
+  const transcript = expectedSignerPublicKey ? new SenderSigTranscript() : null
+  transcript?.absorbHeader(parsed.unauthenticatedBytes, parsed.totalChunks)
+
   const plaintextParts: BlobPart[] = []
   let cursor = parsed.headerLength
   let bytesEmitted = 0
@@ -254,6 +281,7 @@ export async function decryptBlob(
     const plaintext = await decryptChunk(ctx, i, cipherBytes)
     bytesEmitted += plaintext.length
     plaintextParts.push(asBlobPart(plaintext))
+    transcript?.absorbChunk(i, cipherBytes)
 
     onProgress?.((i + 1) / Math.max(parsed.totalChunks, 1))
   }
@@ -261,9 +289,19 @@ export async function decryptBlob(
   if (bytesEmitted !== parsed.plaintextSize) {
     throw new HeaderError('plaintext_size_mismatch')
   }
-  if (cursor !== blob.size) {
-    throw new HeaderError('trailing_bytes_after_last_chunk')
-  }
+
+  // Trailing bytes are an optional signature block, not corruption; parse
+  // and surface it, rejecting only malformed trailing garbage.
+  const trailingBytes =
+    cursor < blob.size
+      ? new Uint8Array(await blob.slice(cursor).arrayBuffer())
+      : new Uint8Array(0)
+  const signature = finalizeSignatureMetadata({
+    trailingBytes,
+    transcriptDigest: transcript ? transcript.digest() : new Uint8Array(32),
+    expectedSignerPublicKey,
+  })
+  options.onSignature?.(signature)
 
   if (parsed.totalChunks === 0) onProgress?.(1)
 
