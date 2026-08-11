@@ -52,6 +52,17 @@ export function parseAesGcmV1SuitePayload(
       'aes-gcm-v1: suite payload must be 72 bytes',
     )
   }
+  // The 48-byte AES-GCM wrap (32-byte key + 16-byte tag) is zero-padded to
+  // 60 bytes; the reserved pad (bytes 48..60) MUST be all zero, mirroring
+  // suite 0x03's M6 check (src/suites/pq-hybrid-v1/index.ts). Without it a
+  // content-key holder could set arbitrary pad bytes, recompute the header
+  // MAC, and ship a MAC-valid file no reader validates — a canonicalization
+  // gap where two bit-distinct files decrypt identically.
+  for (let i = 48; i < 60; i += 1) {
+    if (bytes[i] !== 0) {
+      throw new RangeError('aes-gcm-v1: reserved wrapped_key pad must be zero')
+    }
+  }
   return {
     wrappedKey: bytes.slice(0, 60),
     wrapIv: bytes.slice(60, 72),

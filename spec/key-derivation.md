@@ -145,8 +145,19 @@ shieldfive/v1/xchacha/nonce-prefix
 shieldfive/v1/pq-hybrid/combine
 shieldfive/v1/pq-hybrid/ml-kem-1024-seed
 shieldfive/v1/share-transport
+shieldfive/v1/inbound/x25519-static-seed
+shieldfive/v1/inbound/envelope-key
+shieldfive/v1/inbound/ed25519-signing-seed
 shieldfive/v1/argon2id/salt-compression
 ```
+
+The three `shieldfive/v1/inbound/*` labels drive the zero-knowledge
+inbound-intake path (`src/identity/inbound.ts`). Two are derived directly
+from the account master secret — `ed25519-signing-seed` yields the firm's
+inbound signing seed and `x25519-static-seed` its static X25519 secret —
+so a host that reuses either label against the master secret would
+recompute identity-grade key material. They are forbidden for the same
+reason as every other entry.
 
 ### Reserved for future use
 
@@ -160,11 +171,14 @@ shieldfive/v1/envelope-key
 shieldfive/v1/metadata-key
 ```
 
-Interpretation note: the forbidden-list framing above scopes to
-strings the library actually consumes today. The two entries here are
-spec-only reservations carried over from the derivation tree, kept
-separate so the forbidden list can be cross-checked against
-`HKDF_INFO` in `src/internal/types.ts` without phantom entries.
+Interpretation note: the "Forbidden cross-context usage" list above is
+kept in one-to-one correspondence with the consumed entries of
+`HKDF_INFO` in `src/internal/types.ts` — every string the library derives
+with today appears there (this is asserted by a unit test so the two
+cannot drift). The two entries in this "Reserved for future use" block
+are spec-only reservations that `HKDF_INFO` does NOT yet contain, kept
+separate so the cross-check stays exact with no phantom entries in either
+direction.
 
 If the host application needs a new derived key, it MUST use a fresh
 domain string of the form `<application>/<version>/<purpose>` to ensure

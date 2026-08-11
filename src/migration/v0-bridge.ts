@@ -52,9 +52,29 @@ export {
 export interface V0EncryptOptions {
   /** Plaintext blob. */
   blob: Blob
-  /** 32-byte AES-256 content key. Must already be unwrapped. */
+  /**
+   * 32-byte AES-256 content key. Must already be unwrapped.
+   *
+   * SECURITY: `contentKey` and `noncePrefix` together form this file's
+   * AES-GCM nonce namespace. Reusing the same (contentKey, noncePrefix)
+   * pair across two DIFFERENT plaintexts reuses every chunk's (key, IV)
+   * and is catastrophic — it reproduces the keystream (ct1 ^ ct2 = pt1 ^
+   * pt2, enabling plaintext recovery) and leaks the GHASH authentication
+   * key (enabling forgery). See the note on `noncePrefix`.
+   */
   contentKey: Uint8Array
-  /** 4-byte per-file random nonce prefix. Generated if omitted. */
+  /**
+   * 4-byte per-file nonce prefix. Generated fresh (random) when omitted —
+   * that is the safe default and requires no caller cooperation.
+   *
+   * SECURITY: if you persist and re-supply a prefix (which the returned
+   * {@link V0EncryptResult} explicitly invites you to do), you MUST use a
+   * FRESH prefix whenever you re-encrypt an edited file under the same
+   * `contentKey`. Re-encrypting different content under an unchanged
+   * (contentKey, noncePrefix) pair reuses the AES-GCM nonce and is
+   * catastrophic (see `contentKey`). This legacy v0 writer exists solely
+   * for the Phase-1 migration; new data must use a v1 suite instead.
+   */
   noncePrefix?: Uint8Array
   /** Plaintext bytes per chunk. Production uses 5 MiB or 8 MiB. */
   chunkSize: number
