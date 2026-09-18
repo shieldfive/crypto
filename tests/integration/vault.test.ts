@@ -137,6 +137,7 @@ test('the owner copy of a grant secret opens only for the exact scope, and only 
   const scope = {
     grantId: uuid(), scopeAll: false, includeMedia: false,
     rootIds: [uuid(), uuid()], trashFolderId: uuid(), excludedIds: [uuid()],
+    excludedKeyFingerprints: ['a'.repeat(64)],
   }
   const wrapped = await wrapGrantSecret({ rootKey: rk, scope, secret })
   assert.deepEqual(await unwrapGrantSecret({ rootKey: rk, scope: { ...scope, rootIds: [...scope.rootIds].reverse() }, wrapped }), secret)
@@ -146,6 +147,7 @@ test('the owner copy of a grant secret opens only for the exact scope, and only 
     { ...scope, rootIds: [...scope.rootIds, uuid()] },
     { ...scope, trashFolderId: null },
     { ...scope, excludedIds: [] },
+    { ...scope, excludedKeyFingerprints: [] },
     { ...scope, grantId: uuid() },
   ]) {
     await rejects(unwrapGrantSecret({ rootKey: rk, scope: tampered, wrapped }), 'unwrap_failed')

@@ -539,6 +539,19 @@ export interface GrantScope {
   trashFolderId: string | null
   /** Top-level folders a whole-vault grant must never cover (the Bin, and Media unless opted in). */
   excludedIds: readonly string[]
+  /**
+   * keyFingerprint() of those folders' keys. A server can relabel a row with
+   * another folder's wrapped key; it cannot change a key's fingerprint, so the
+   * owner's browser refuses to hand an excluded folder's key to the grant under
+   * any id.
+   */
+  excludedKeyFingerprints: readonly string[]
+}
+
+/** SHA-256 of a 32-byte key, hex. Reveals nothing usable about a random key. */
+export function keyFingerprint(key: Uint8Array): string {
+  assertKey(key, 'key')
+  return bytesToHex(sha256(key))
 }
 
 /** A canonical, order-independent string for a scope. Any change to the scope changes it. */
@@ -557,6 +570,13 @@ export function canonicalGrantScope(scope: GrantScope): string {
     `roots=${ids(scope.rootIds, 'rootIds')}`,
     `trash=${scope.trashFolderId ?? '-'}`,
     `excluded=${ids(scope.excludedIds, 'excludedIds')}`,
+    `excludedKeys=${[...new Set(scope.excludedKeyFingerprints)]
+      .map((f) => {
+        if (!/^[0-9a-f]{64}$/.test(f)) throw new VaultCryptoError('invalid_input', 'bad key fingerprint')
+        return f
+      })
+      .sort()
+      .join(',')}`,
   ].join('|')
 }
 

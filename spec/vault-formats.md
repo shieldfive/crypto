@@ -78,6 +78,7 @@ later (new top-level folders, renamed roots, post-quantum aux wraps):
 ```
 scope   = "sf-grant-scope-v1|" grant_id "|all=" 0|1 "|media=" 0|1 "|roots=" sorted,unique ids
           "|trash=" id or "-" "|excluded=" sorted,unique ids
+          "|excludedKeys=" sorted,unique hex(sha256(key)) of the excluded folders' keys
 SK      = HKDF-SHA-256(ikm = RK, salt = UTF-8(grant_id), info = "shieldfive/v1/agent-grant/secret", L = 32)
 owner   = AES-256-GCM(SK, iv = 12 random bytes, aad = UTF-8(scope), pt = secret)
 ```

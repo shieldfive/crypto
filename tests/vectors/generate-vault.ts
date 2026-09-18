@@ -66,7 +66,7 @@ async function main() {
 
   // Owner copy of the grant secret: HKDF(RK, salt = grant id, "…/agent-grant/secret"),
   // AAD = canonical scope.
-  const scope = `sf-grant-scope-v1|${grantId}|all=0|media=0|roots=${folderId}|trash=-|excluded=`
+  const scope = `sf-grant-scope-v1|${grantId}|all=0|media=0|roots=${folderId}|trash=-|excluded=|excludedKeys=`
   const sk = await hkdf(rootKey, enc.encode(grantId), 'shieldfive/v1/agent-grant/secret')
   const secretIv = fill(12, 0xf0)
   const secretWrap = await gcm(sk, secretIv, secret, enc.encode(scope))

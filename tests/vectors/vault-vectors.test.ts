@@ -77,7 +77,7 @@ test('grant: wrap key, fingerprint, token hash and connection string match', asy
 
 test('grant secret: canonical scope and the owner wrap match the independent vector', async () => {
   const g = V.grant
-  const scope = { grantId: g.grant_id, scopeAll: false, includeMedia: false, rootIds: [g.folder_id], trashFolderId: null, excludedIds: [] }
+  const scope = { grantId: g.grant_id, scopeAll: false, includeMedia: false, rootIds: [g.folder_id], trashFolderId: null, excludedIds: [], excludedKeyFingerprints: [] }
   assert.equal(canonicalGrantScope(scope), g.scope_canonical)
   const secret = await unwrapGrantSecret({ rootKey: hexToBytes(V.chain.root_key_hex), scope, wrapped: { wrapped: g.secret_wrapped, iv: g.secret_iv } })
   assert.equal(bytesToHex(secret), g.secret_hex)

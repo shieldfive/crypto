@@ -40,8 +40,8 @@
     "aad": "sf-grant-v1|0b7e9d2c-1a3f-4e5d-9c8b-7a6f5e4d3c2b|folder|11111111-2222-4333-8444-555555555555",
     "folder_key_wrapped": "vwzvHaGiegOfITvZ/kxYYzouMXFH/4BrffyEkhFA60Hlyt3TCIdLSXuf0zD3CKSk",
     "folder_key_iv": "4OHi4+Tl5ufo6err",
-    "scope_canonical": "sf-grant-scope-v1|0b7e9d2c-1a3f-4e5d-9c8b-7a6f5e4d3c2b|all=0|media=0|roots=11111111-2222-4333-8444-555555555555|trash=-|excluded=",
-    "secret_wrapped": "rnlQAikqOCIV36QyHyX0J/bwekn+VZcVX4m1VPGwfvV6mLdKMvz3+Kn0FvtP0z4a",
+    "scope_canonical": "sf-grant-scope-v1|0b7e9d2c-1a3f-4e5d-9c8b-7a6f5e4d3c2b|all=0|media=0|roots=11111111-2222-4333-8444-555555555555|trash=-|excluded=|excludedKeys=",
+    "secret_wrapped": "rnlQAikqOCIV36QyHyX0J/bwekn+VZcVX4m1VPGwfvVNv7H8/FKNiDRCMifCnSSe",
     "secret_iv": "8PHy8/T19vf4+fr7"
   }
 }
