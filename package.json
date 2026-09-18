@@ -1,6 +1,6 @@
 {
   "name": "@shieldfive/crypto",
-  "version": "1.0.0-rc.4",
+  "version": "1.0.0-rc.5",
   "description": "Client-side post-quantum hybrid encryption for cloud storage. The cryptographic core of ShieldFive.",
   "type": "module",
   "license": "Apache-2.0",
@@ -75,6 +75,10 @@
     "./format": {
       "types": "./dist/format/header.d.ts",
       "default": "./dist/format/header.js"
+    },
+    "./vault": {
+      "types": "./dist/vault/index.d.ts",
+      "default": "./dist/vault/index.js"
     }
   },
   "files": [

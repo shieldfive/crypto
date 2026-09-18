@@ -149,6 +149,8 @@ shieldfive/v1/inbound/x25519-static-seed
 shieldfive/v1/inbound/envelope-key
 shieldfive/v1/inbound/ed25519-signing-seed
 shieldfive/v1/argon2id/salt-compression
+shieldfive/v1/agent-grant/wrap
+shieldfive/v1/agent-grant/secret
 ```
 
 The three `shieldfive/v1/inbound/*` labels drive the zero-knowledge

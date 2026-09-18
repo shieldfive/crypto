@@ -106,6 +106,15 @@ export const HKDF_INFO = Object.freeze({
   // published (ml_kem || x25519) bundle so a guest can detect a key swap.
   INBOUND_SIGNING_SEED: 'shieldfive/v1/inbound/ed25519-signing-seed',
   ARGON2ID_SALT_COMPRESSION: 'shieldfive/v1/argon2id/salt-compression',
+  // Agent grants (src/vault): the grant secret, generated in the owner's client
+  // and never sent to the server, is expanded into the key that wraps the
+  // grant's scope-root folder keys. Salt = the grant id.
+  AGENT_GRANT_WRAP: 'shieldfive/v1/agent-grant/wrap',
+  // The owner's copy of a grant secret is wrapped under a key derived from the
+  // vault root key with this label, authenticated against the grant's scope,
+  // so no other key wrapped under RK can stand in for it and a server that
+  // edits the grant's scope makes the secret stop opening.
+  AGENT_GRANT_SECRET: 'shieldfive/v1/agent-grant/secret',
 })
 
 /** AAD domain string mixed into every chunk's authenticator */

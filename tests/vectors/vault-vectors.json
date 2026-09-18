@@ -1,0 +1,47 @@
+{
+  "spec": "spec/vault-formats.md",
+  "chain": {
+    "root_key_hex": "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
+    "folder_key_hex": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+    "file_key_hex": "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+    "fk_wrapped": "6Y59tTpqWlSUREGcxkjN9Dx2sS80hVPXLgXCLFExWfClRmMNOYPSZsp/9R4poZ3R",
+    "fk_iv": "oKGio6Slpqeoqaqr"
+  },
+  "names": {
+    "folder_key_hex": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+    "row_id": "6f1c2a3b-4d5e-4f60-8a71-92b3c4d5e6f7",
+    "plaintext": "Tax return 2025 – final (signed).pdf",
+    "v6": {
+      "v": 6,
+      "ct": "mF5wEahFz45GNTrcHWObt1qLUKb/tnzcJyYtijA8YZwtc9/dB1A=",
+      "tag": "bShhVAApTF5sykAGhcJiDg==",
+      "iv": "0NHS09TV1tfY2drb",
+      "salt": "wMHCw8TFxsfIycrLzM3Ozw==",
+      "kdf": "interactive"
+    },
+    "v4_no_kdf": {
+      "v": 4,
+      "ct": "mF5wEahFz45GNTrcHWObt1qLUKb/tnzcJyYtijA8YZwtc9/dB1A=",
+      "tag": "mt/RL/A78vPUitgu2YBGeg==",
+      "iv": "0NHS09TV1tfY2drb",
+      "salt": "wMHCw8TFxsfIycrLzM3Ozw=="
+    }
+  },
+  "grant": {
+    "grant_id": "0b7e9d2c-1a3f-4e5d-9c8b-7a6f5e4d3c2b",
+    "token_hex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+    "secret_hex": "8182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0",
+    "ml_kem_pk_fill_start": 5,
+    "pk_fingerprint": "f3340f414a45c7da3d18656a82089857344ee44b9cbc046e3caf695f17065e4e",
+    "connection_string": "sf-grant-v1:0b7e9d2c-1a3f-4e5d-9c8b-7a6f5e4d3c2b.AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA.gYKDhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnJ2en6A.f3340f414a45c7da3d18656a82089857344ee44b9cbc046e3caf695f17065e4e",
+    "token_hash": "ae216c2ef5247a3782c135efa279a3e4cdc61094270f5d2be58c6204b7a612c9",
+    "wrap_key_hex": "cc89232e14f05ebff8850793a58e02acc231cc898c55401d24d1f323081b0757",
+    "folder_id": "11111111-2222-4333-8444-555555555555",
+    "aad": "sf-grant-v1|0b7e9d2c-1a3f-4e5d-9c8b-7a6f5e4d3c2b|folder|11111111-2222-4333-8444-555555555555",
+    "folder_key_wrapped": "vwzvHaGiegOfITvZ/kxYYzouMXFH/4BrffyEkhFA60Hlyt3TCIdLSXuf0zD3CKSk",
+    "folder_key_iv": "4OHi4+Tl5ufo6err",
+    "scope_canonical": "sf-grant-scope-v1|0b7e9d2c-1a3f-4e5d-9c8b-7a6f5e4d3c2b|all=0|media=0|roots=11111111-2222-4333-8444-555555555555|trash=-|excluded=|excludedKeys=",
+    "secret_wrapped": "rnlQAikqOCIV36QyHyX0J/bwekn+VZcVX4m1VPGwfvVNv7H8/FKNiDRCMifCnSSe",
+    "secret_iv": "8PHy8/T19vf4+fr7"
+  }
+}

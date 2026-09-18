@@ -5,6 +5,32 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.0.0-rc.5 — 2026-09-18
+
+No change to any file-encryption suite. Adds `@shieldfive/crypto/vault`,
+which gives non-browser clients a single reviewed implementation of the
+formats the web app stores, plus the new agent-grant wrap.
+
+### Added
+
+- **Vault key chain.** `wrapChainKey` and `unwrapChainKey` implement the
+  AES-256-GCM raw-key wrap used by `fk_wrapped`, `csk_wrapped` and
+  `pqk_fk_wrapped`.
+- **Name envelopes.** `parseNameEnvelope`, `decryptName` (v4 and v6, with the
+  web app's fallback when `kdf` is missing) and `encryptNameV6` (AAD = row
+  UUID).
+- **Agent grants.** `createGrantCredential`, `formatConnectionString` and
+  `parseConnectionString`, `hashGrantToken`, `deriveGrantWrapKey` (new HKDF
+  label `shieldfive/v1/agent-grant/wrap`), and `wrapKeyForGrant` /
+  `unwrapKeyForGrant` (kinds `folder`, `file`, `file_pq`, `name`), and
+  `decryptNameWithKey`, and `wrapGrantSecret` / `unwrapGrantSecret` for the owner's
+  copy of a grant secret, authenticated against a `canonicalGrantScope` (new
+  HKDF label `shieldfive/v1/agent-grant/secret`). Every wrap is bound to its grant, object kind and
+  object id.
+- `spec/vault-formats.md`, and vectors generated from an independent
+  implementation (`@noble/hashes` Argon2id plus raw Web Crypto) in
+  `tests/vectors/vault-vectors.json`.
+
 ## 1.0.0-rc.3 — 2026-08-03
 
 No wire-format changes; suite `0x03` and the identity bundle are untouched. Adds

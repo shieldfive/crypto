@@ -99,6 +99,7 @@ export * as kdfArgon2id from './kdf/argon2id.js'
 export * as identity from './identity/index.js'
 export * as inbound from './identity/inbound.js'
 export * as migrationV0 from './migration/v0-bridge.js'
+export * as vault from './vault/index.js'
 
 // ──────────────────────────────────────────────────────────────────────
 // Auto-routing decryptor
@@ -219,7 +220,7 @@ export async function autoDecryptBlob(
 }
 
 /** Library version, also written into format documentation. */
-export const SHIELDFIVE_CRYPTO_VERSION = '1.0.0-rc.4'
+export const SHIELDFIVE_CRYPTO_VERSION = '1.0.0-rc.5'
 
 /** Default cipher suite for new files when not specified by the caller. */
 export const DEFAULT_SUITE = SUITE.PQ_HYBRID_XCHACHA_MLKEM1024_V1
