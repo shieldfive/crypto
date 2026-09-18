@@ -394,8 +394,15 @@ function fromBase64Url(value: string): Uint8Array {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) {
     throw new VaultCryptoError('invalid_connection_string', 'bad base64url')
   }
+  if (value.length % 4 === 1) {
+    throw new VaultCryptoError('invalid_connection_string', 'bad base64url length')
+  }
   const b64 = value.replace(/-/g, '+').replace(/_/g, '/')
-  return base64ToBytes(b64 + '='.repeat((4 - (b64.length % 4)) % 4))
+  try {
+    return base64ToBytes(b64 + '='.repeat((4 - (b64.length % 4)) % 4))
+  } catch {
+    throw new VaultCryptoError('invalid_connection_string', 'bad base64url')
+  }
 }
 
 /** SHA-256 of an ML-KEM public key, hex. Pinned in the connection string. */
@@ -515,4 +522,85 @@ export async function unwrapKeyForGrant(options: {
   const key = await aesGcmOpen(options.grantWrapKey, iv, ct, aad)
   if (!key) throw new VaultCryptoError('unwrap_failed', 'grant wrap did not open')
   return key
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// The owner's copy of a grant secret, bound to the grant's scope
+// ──────────────────────────────────────────────────────────────────────
+
+/** What a grant covers, as the owner decided it when creating the grant. */
+export interface GrantScope {
+  grantId: string
+  scopeAll: boolean
+  includeMedia: boolean
+  /** Scope-root folder ids (empty for a whole-vault grant). */
+  rootIds: readonly string[]
+  /** The grant's own trash folder, or null for a read-only grant. */
+  trashFolderId: string | null
+  /** Top-level folders a whole-vault grant must never cover (the Bin, and Media unless opted in). */
+  excludedIds: readonly string[]
+}
+
+/** A canonical, order-independent string for a scope. Any change to the scope changes it. */
+export function canonicalGrantScope(scope: GrantScope): string {
+  assertUuid(scope.grantId, 'grantId')
+  const ids = (list: readonly string[], what: string) => {
+    for (const id of list) assertUuid(id, what)
+    return [...new Set(list)].sort().join(',')
+  }
+  if (scope.trashFolderId !== null) assertUuid(scope.trashFolderId, 'trashFolderId')
+  return [
+    'sf-grant-scope-v1',
+    scope.grantId,
+    `all=${scope.scopeAll ? 1 : 0}`,
+    `media=${scope.includeMedia ? 1 : 0}`,
+    `roots=${ids(scope.rootIds, 'rootIds')}`,
+    `trash=${scope.trashFolderId ?? '-'}`,
+    `excluded=${ids(scope.excludedIds, 'excludedIds')}`,
+  ].join('|')
+}
+
+async function grantSecretKey(rootKey: Uint8Array, grantId: string): Promise<Uint8Array> {
+  assertKey(rootKey, 'rootKey')
+  assertUuid(grantId, 'grantId')
+  return hkdfSha256({
+    ikm: rootKey,
+    salt: TEXT_ENCODER.encode(grantId),
+    info: HKDF_INFO.AGENT_GRANT_SECRET,
+    length: KEY_BYTES,
+  })
+}
+
+/**
+ * Wrap a grant secret for the owner: AES-256-GCM under HKDF(RK, grant id,
+ * AGENT_GRANT_SECRET), with the canonical scope as AAD. Only the owner's
+ * vault root key opens it, and only for exactly this scope.
+ */
+export async function wrapGrantSecret(options: {
+  rootKey: Uint8Array
+  scope: GrantScope
+  secret: Uint8Array
+}): Promise<WrappedKey> {
+  assertKey(options.secret, 'secret')
+  const key = await grantSecretKey(options.rootKey, options.scope.grantId)
+  const iv = randomBytes(IV_BYTES)
+  const ct = await aesGcmSeal(key, iv, options.secret, TEXT_ENCODER.encode(canonicalGrantScope(options.scope)))
+  return { wrapped: bytesToBase64(ct), iv: bytesToBase64(iv) }
+}
+
+/** Open the owner's copy of a grant secret. Fails if the scope differs in any way from the one it was wrapped for. */
+export async function unwrapGrantSecret(options: {
+  rootKey: Uint8Array
+  scope: GrantScope
+  wrapped: WrappedKey
+}): Promise<Uint8Array> {
+  const key = await grantSecretKey(options.rootKey, options.scope.grantId)
+  const iv = base64ToBytes(options.wrapped.iv)
+  const ct = base64ToBytes(options.wrapped.wrapped)
+  if (iv.length !== IV_BYTES || ct.length !== KEY_BYTES + TAG_BYTES) {
+    throw new VaultCryptoError('unwrap_failed', 'grant secret wrap has the wrong shape')
+  }
+  const secret = await aesGcmOpen(key, iv, ct, TEXT_ENCODER.encode(canonicalGrantScope(options.scope)))
+  if (!secret) throw new VaultCryptoError('unwrap_failed', 'grant secret did not open for this scope')
+  return secret
 }

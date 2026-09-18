@@ -12,6 +12,8 @@ import {
   createGrantCredential,
   decryptName,
   decryptNameWithKey,
+  unwrapGrantSecret,
+  wrapGrantSecret,
   deriveNameKeyForEnvelope,
   deriveGrantWrapKey,
   encryptNameV6,
@@ -126,5 +128,40 @@ test('a grant on folder A opens A’s subtree and not its sibling B', async () =
   for (const k of [gk, a, a1]) {
     await rejects(unwrapChainKey(k, wB), 'unwrap_failed')
     await rejects(unwrapChainKey(k, wG), 'unwrap_failed')
+  }
+})
+
+test('the owner copy of a grant secret opens only for the exact scope, and only under RK', async () => {
+  const rk = randomBytes(32)
+  const secret = randomBytes(32)
+  const scope = {
+    grantId: uuid(), scopeAll: false, includeMedia: false,
+    rootIds: [uuid(), uuid()], trashFolderId: uuid(), excludedIds: [uuid()],
+  }
+  const wrapped = await wrapGrantSecret({ rootKey: rk, scope, secret })
+  assert.deepEqual(await unwrapGrantSecret({ rootKey: rk, scope: { ...scope, rootIds: [...scope.rootIds].reverse() }, wrapped }), secret)
+  for (const tampered of [
+    { ...scope, scopeAll: true },
+    { ...scope, includeMedia: true },
+    { ...scope, rootIds: [...scope.rootIds, uuid()] },
+    { ...scope, trashFolderId: null },
+    { ...scope, excludedIds: [] },
+    { ...scope, grantId: uuid() },
+  ]) {
+    await rejects(unwrapGrantSecret({ rootKey: rk, scope: tampered, wrapped }), 'unwrap_failed')
+  }
+  await rejects(unwrapGrantSecret({ rootKey: randomBytes(32), scope, wrapped }), 'unwrap_failed')
+  // Domain separation: a plain chain wrap under RK (a folder key) is not accepted as a secret.
+  const folderWrap = await wrapChainKey(rk, randomBytes(32))
+  await rejects(unwrapGrantSecret({ rootKey: rk, scope, wrapped: folderWrap }), 'unwrap_failed')
+  // …and the secret wrap does not open as a chain key under RK.
+  await rejects(unwrapChainKey(rk, wrapped), 'unwrap_failed')
+})
+
+test('malformed base64url in a connection string is a typed error, never a crash', () => {
+  const s = formatConnectionString(createGrantCredential({ grantId: uuid(), mlKemPublicKey: randomBytes(1568) }))
+  const parts = s.split('.')
+  for (const bad of [[parts[0], 'a', parts[2], parts[3]], [parts[0], parts[1], 'ab!c', parts[3]]]) {
+    assert.throws(() => parseConnectionString(bad.join('.')), (e: unknown) => e instanceof VaultCryptoError && e.code === 'invalid_connection_string')
   }
 })

@@ -72,6 +72,21 @@ The AAD stops a server from presenting one object's wrap as another's. The
 public-key fingerprint lets a grant that writes files detect a substituted
 ML-KEM public key.
 
+The owner keeps a copy of the secret so their browser can extend the grant
+later (new top-level folders, renamed roots, post-quantum aux wraps):
+
+```
+scope   = "sf-grant-scope-v1|" grant_id "|all=" 0|1 "|media=" 0|1 "|roots=" sorted,unique ids
+          "|trash=" id or "-" "|excluded=" sorted,unique ids
+SK      = HKDF-SHA-256(ikm = RK, salt = UTF-8(grant_id), info = "shieldfive/v1/agent-grant/secret", L = 32)
+owner   = AES-256-GCM(SK, iv = 12 random bytes, aad = UTF-8(scope), pt = secret)
+```
+
+The scope is authenticated rather than trusted. A server that edits a grant's
+scope makes the owner's copy stop opening, so the owner's browser never
+extends a grant beyond what the owner chose. The separate label means no
+other key wrapped under RK can stand in for the secret.
+
 Security properties and limits:
 
 - Leaking the secret without the token gives nothing. The server returns no

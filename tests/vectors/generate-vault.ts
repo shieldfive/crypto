@@ -64,6 +64,13 @@ async function main() {
   const aad = `sf-grant-v1|${grantId}|folder|${folderId}`
   const grantWrap = await gcm(gk, grantIv, folderKey, enc.encode(aad))
 
+  // Owner copy of the grant secret: HKDF(RK, salt = grant id, "…/agent-grant/secret"),
+  // AAD = canonical scope.
+  const scope = `sf-grant-scope-v1|${grantId}|all=0|media=0|roots=${folderId}|trash=-|excluded=`
+  const sk = await hkdf(rootKey, enc.encode(grantId), 'shieldfive/v1/agent-grant/secret')
+  const secretIv = fill(12, 0xf0)
+  const secretWrap = await gcm(sk, secretIv, secret, enc.encode(scope))
+
   const out = {
     spec: 'spec/vault-formats.md',
     chain: {
@@ -93,6 +100,9 @@ async function main() {
       aad,
       folder_key_wrapped: b64(grantWrap),
       folder_key_iv: b64(grantIv),
+      scope_canonical: scope,
+      secret_wrapped: b64(secretWrap),
+      secret_iv: b64(secretIv),
     },
   }
   const here = dirname(fileURLToPath(import.meta.url))

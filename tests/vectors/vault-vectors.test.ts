@@ -23,6 +23,8 @@ import {
   publicKeyFingerprint,
   unwrapChainKey,
   unwrapKeyForGrant,
+  canonicalGrantScope,
+  unwrapGrantSecret,
 } from '../../src/vault/index.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -71,4 +73,12 @@ test('grant: wrap key, fingerprint, token hash and connection string match', asy
     wrapped: { wrapped: g.folder_key_wrapped, iv: g.folder_key_iv },
   })
   assert.equal(bytesToHex(fk), V.chain.folder_key_hex)
+})
+
+test('grant secret: canonical scope and the owner wrap match the independent vector', async () => {
+  const g = V.grant
+  const scope = { grantId: g.grant_id, scopeAll: false, includeMedia: false, rootIds: [g.folder_id], trashFolderId: null, excludedIds: [] }
+  assert.equal(canonicalGrantScope(scope), g.scope_canonical)
+  const secret = await unwrapGrantSecret({ rootKey: hexToBytes(V.chain.root_key_hex), scope, wrapped: { wrapped: g.secret_wrapped, iv: g.secret_iv } })
+  assert.equal(bytesToHex(secret), g.secret_hex)
 })
