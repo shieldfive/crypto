@@ -11,6 +11,8 @@ import { randomBytes } from '../../src/internal/runtime.js'
 import {
   createGrantCredential,
   decryptName,
+  decryptNameWithKey,
+  deriveNameKeyForEnvelope,
   deriveGrantWrapKey,
   encryptNameV6,
   formatConnectionString,
@@ -89,6 +91,16 @@ test('a grant wrap only opens for the same grant, kind and object', async () => 
     unwrapKeyForGrant({ grantWrapKey: await deriveGrantWrapKey(randomBytes(32), grantId), grantId, kind: 'folder', objectId: folderId, wrapped }),
     'unwrap_failed',
   )
+})
+
+test('a name-key wrap opens exactly one envelope', async () => {
+  const rk = randomBytes(32)
+  const rowId = uuid()
+  const env = await encryptNameV6({ name: 'root-level.pdf', folderKey: rk, rowId })
+  const other = await encryptNameV6({ name: 'other.pdf', folderKey: rk, rowId: uuid() })
+  const nameKey = await deriveNameKeyForEnvelope({ envelope: env, parentKey: rk, rowId })
+  assert.equal(await decryptNameWithKey({ envelope: env, nameKey, rowId }), 'root-level.pdf')
+  await rejects(decryptNameWithKey({ envelope: other, nameKey, rowId }), 'name_decrypt_failed')
 })
 
 test('a grant on folder A opens A’s subtree and not its sibling B', async () => {

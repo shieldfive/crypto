@@ -57,8 +57,16 @@ secret  = 32 random bytes. It never leaves a client.
 GK      = HKDF-SHA-256(ikm = secret, salt = UTF-8(grant_id), info = "shieldfive/v1/agent-grant/wrap", L = 32)
 wrap    = AES-256-GCM(GK, iv = 12 random bytes,
                       aad = UTF-8("sf-grant-v1|" grant_id "|" kind "|" object_id), pt = key)
-kind    = "folder" (a folder key) | "file" (a file content key, or the combined key for suite 0x03)
+kind    = "folder"  a folder key
+        | "file"    the key csk_wrapped holds (the classical envelope key for suite 0x03)
+        | "file_pq" the combined content key of a suite-0x03 file
+        | "name"    the derived key of ONE name envelope
 ```
+
+`file`, `file_pq` and `name` are issued only for objects whose parent key
+the grant does not hold: the scope roots' own names, and files at the vault
+root when the grant covers the whole vault. A `name` wrap opens one envelope.
+It is useless for writing a new name under the same parent.
 
 The AAD stops a server from presenting one object's wrap as another's. The
 public-key fingerprint lets a grant that writes files detect a substituted

@@ -22,7 +22,8 @@ formats the web app stores, plus the new agent-grant wrap.
 - **Agent grants.** `createGrantCredential`, `formatConnectionString` and
   `parseConnectionString`, `hashGrantToken`, `deriveGrantWrapKey` (new HKDF
   label `shieldfive/v1/agent-grant/wrap`), and `wrapKeyForGrant` /
-  `unwrapKeyForGrant`, which bind every wrap to its grant, object kind and
+  `unwrapKeyForGrant` (kinds `folder`, `file`, `file_pq`, `name`), and
+  `decryptNameWithKey`. Every wrap is bound to its grant, object kind and
   object id.
 - `spec/vault-formats.md`, and vectors generated from an independent
   implementation (`@noble/hashes` Argon2id plus raw Web Crypto) in

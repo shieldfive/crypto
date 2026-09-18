@@ -266,6 +266,58 @@ export async function decryptName(options: {
   throw new VaultCryptoError('name_decrypt_failed', 'name envelope did not open')
 }
 
+/**
+ * Decrypt a name with an already-derived name key (a grant's `name` wrap),
+ * for objects whose parent key the caller does not hold.
+ */
+export async function decryptNameWithKey(options: {
+  envelope: NameEnvelope
+  nameKey: Uint8Array
+  rowId?: string
+}): Promise<string> {
+  const { envelope, nameKey, rowId } = options
+  assertKey(nameKey, 'nameKey')
+  if (envelope.v === 6 && !rowId) {
+    throw new VaultCryptoError('invalid_input', 'v6 names need the row id')
+  }
+  const sealed = concatBytes([base64ToBytes(envelope.ct), base64ToBytes(envelope.tag)])
+  const aad = envelope.v === 6 ? TEXT_ENCODER.encode(rowId as string) : undefined
+  const pt = await aesGcmOpen(nameKey, base64ToBytes(envelope.iv), sealed, aad)
+  if (pt) {
+    try {
+      return TEXT_DECODER.decode(pt)
+    } catch {
+      // fall through
+    }
+  }
+  throw new VaultCryptoError('name_decrypt_failed', 'name envelope did not open')
+}
+
+/**
+ * The name key for one envelope: what an owner wraps as a grant's `name`
+ * object. For an envelope without a `kdf` field the level is found by opening
+ * it, the same fallback `decryptName` uses, so the wrapped key always works.
+ */
+export async function deriveNameKeyForEnvelope(options: {
+  envelope: NameEnvelope
+  parentKey: Uint8Array
+  rowId?: string
+}): Promise<Uint8Array> {
+  const { envelope, parentKey, rowId } = options
+  const salt = base64ToBytes(envelope.salt)
+  const levels: NameKdfLevel[] = envelope.kdf ? [envelope.kdf] : ['interactive', 'moderate']
+  for (const level of levels) {
+    const nameKey = await deriveNameKey(parentKey, salt, level)
+    try {
+      await decryptNameWithKey(rowId === undefined ? { envelope, nameKey } : { envelope, nameKey, rowId })
+      return nameKey
+    } catch (err) {
+      if (!(err instanceof VaultCryptoError) || err.code !== 'name_decrypt_failed') throw err
+    }
+  }
+  throw new VaultCryptoError('name_decrypt_failed', 'name envelope did not open')
+}
+
 /** Encrypt a name as a v6 envelope bound to `rowId`, at the web app's default level. */
 export async function encryptNameV6(options: {
   name: string
@@ -299,8 +351,22 @@ export async function encryptNameV6(options: {
 
 export const GRANT_CONNECTION_PREFIX = 'sf-grant-v1:'
 
-/** What a grant wrap covers: a folder key, or one file's content key. */
-export type GrantObjectKind = 'folder' | 'file'
+/**
+ * What a grant wrap covers.
+ *
+ *   folder   a folder key (scope roots, and top-level folders for whole-vault)
+ *   file     the key a file's `csk_wrapped` holds: the content key for suites
+ *            0x00-0x02, the classical envelope key for 0x03
+ *   file_pq  the combined content key of a suite-0x03 file
+ *   name     the Argon2id-derived key of ONE name envelope, for objects whose
+ *            name is sealed under a key outside the grant (a scope root's own
+ *            name, a file at the vault root). Opens that envelope only.
+ *
+ * `file`, `file_pq` and `name` are only issued for objects whose parent key the
+ * grant does not hold; everything below a scope root is reached by the chain.
+ */
+export type GrantObjectKind = 'folder' | 'file' | 'file_pq' | 'name'
+const GRANT_KINDS: ReadonlySet<string> = new Set(['folder', 'file', 'file_pq', 'name'])
 
 export interface GrantCredential {
   grantId: string
@@ -408,8 +474,8 @@ export async function deriveGrantWrapKey(
 }
 
 function grantAad(grantId: string, kind: GrantObjectKind, objectId: string): Uint8Array {
-  if (kind !== 'folder' && kind !== 'file') {
-    throw new VaultCryptoError('invalid_input', 'kind must be folder or file')
+  if (!GRANT_KINDS.has(kind)) {
+    throw new VaultCryptoError('invalid_input', 'unknown grant object kind')
   }
   assertUuid(grantId, 'grantId')
   assertUuid(objectId, 'objectId')
