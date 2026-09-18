@@ -99,6 +99,7 @@ export * as kdfArgon2id from './kdf/argon2id.js'
 export * as identity from './identity/index.js'
 export * as inbound from './identity/inbound.js'
 export * as migrationV0 from './migration/v0-bridge.js'
+export * as vault from './vault/index.js'
 
 // ──────────────────────────────────────────────────────────────────────
 // Auto-routing decryptor

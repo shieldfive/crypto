@@ -75,6 +75,10 @@
     "./format": {
       "types": "./dist/format/header.d.ts",
       "default": "./dist/format/header.js"
+    },
+    "./vault": {
+      "types": "./dist/vault/index.d.ts",
+      "default": "./dist/vault/index.js"
     }
   },
   "files": [

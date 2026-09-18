@@ -1,0 +1,118 @@
+/**
+ * Behaviour of src/vault beyond the fixed vectors: round trips, tamper
+ * resistance, AAD binding, and the scope property a grant relies on — a grant
+ * holding one folder's key opens that subtree and nothing beside it.
+ */
+
+import { strict as assert } from 'node:assert'
+import test from 'node:test'
+
+import { randomBytes } from '../../src/internal/runtime.js'
+import {
+  createGrantCredential,
+  decryptName,
+  deriveGrantWrapKey,
+  encryptNameV6,
+  formatConnectionString,
+  parseConnectionString,
+  parseNameEnvelope,
+  unwrapChainKey,
+  unwrapKeyForGrant,
+  VaultCryptoError,
+  wrapChainKey,
+  wrapKeyForGrant,
+} from '../../src/vault/index.js'
+
+const uuid = () => globalThis.crypto.randomUUID()
+
+async function rejects(p: Promise<unknown>, code: VaultCryptoError['code']) {
+  await assert.rejects(p, (e: unknown) => e instanceof VaultCryptoError && e.code === code)
+}
+
+test('chain wrap round-trips and refuses a wrong key or a flipped bit', async () => {
+  const parent = randomBytes(32)
+  const child = randomBytes(32)
+  const w = await wrapChainKey(parent, child)
+  assert.deepEqual(await unwrapChainKey(parent, w), child)
+  await rejects(unwrapChainKey(randomBytes(32), w), 'unwrap_failed')
+  const bytes = Buffer.from(w.wrapped, 'base64')
+  bytes[3] = (bytes[3] ?? 0) ^ 1
+  await rejects(unwrapChainKey(parent, { ...w, wrapped: bytes.toString('base64') }), 'unwrap_failed')
+})
+
+test('v6 names are bound to their row', async () => {
+  const folderKey = randomBytes(32)
+  const rowId = uuid()
+  const env = await encryptNameV6({ name: 'Invoice #42.pdf', folderKey, rowId })
+  const parsed = parseNameEnvelope(JSON.stringify(env))
+  assert.ok(parsed)
+  assert.equal(await decryptName({ envelope: parsed, folderKey, rowId }), 'Invoice #42.pdf')
+  await rejects(decryptName({ envelope: parsed, folderKey, rowId: uuid() }), 'name_decrypt_failed')
+  await rejects(decryptName({ envelope: parsed, folderKey: randomBytes(32), rowId }), 'name_decrypt_failed')
+  await rejects(decryptName({ envelope: parsed, folderKey }), 'invalid_input')
+})
+
+test('parseNameEnvelope rejects non-envelopes', () => {
+  for (const raw of [null, '', 'plain.txt', '{"v":3,"ct":"","iv":"","tag":""}', '{"v":6}', '[]', '{"v":6,"ct":"a","iv":"b","tag":"c","salt":"d","kdf":"fast"}']) {
+    assert.equal(parseNameEnvelope(raw as string), null, String(raw))
+  }
+})
+
+test('connection strings round-trip and reject malformed input', () => {
+  const cred = createGrantCredential({ grantId: uuid(), mlKemPublicKey: randomBytes(1568) })
+  const s = formatConnectionString(cred)
+  const back = parseConnectionString(`  ${s}\n`)
+  assert.equal(back.grantId, cred.grantId)
+  assert.deepEqual(back.secret, cred.secret)
+  assert.deepEqual(back.token, cred.token)
+  for (const bad of ['', 'sf-grant-v2:' + s.slice(12), s + '.x', s.replace(cred.grantId, 'nope'), s.slice(0, -2)]) {
+    assert.throws(() => parseConnectionString(bad), VaultCryptoError, bad)
+  }
+})
+
+test('a grant wrap only opens for the same grant, kind and object', async () => {
+  const grantId = uuid()
+  const folderId = uuid()
+  const secret = randomBytes(32)
+  const gk = await deriveGrantWrapKey(secret, grantId)
+  const key = randomBytes(32)
+  const wrapped = await wrapKeyForGrant({ grantWrapKey: gk, grantId, kind: 'folder', objectId: folderId, key })
+  assert.deepEqual(await unwrapKeyForGrant({ grantWrapKey: gk, grantId, kind: 'folder', objectId: folderId, wrapped }), key)
+  await rejects(unwrapKeyForGrant({ grantWrapKey: gk, grantId, kind: 'file', objectId: folderId, wrapped }), 'unwrap_failed')
+  await rejects(unwrapKeyForGrant({ grantWrapKey: gk, grantId, kind: 'folder', objectId: uuid(), wrapped }), 'unwrap_failed')
+  const otherGrant = uuid()
+  await rejects(
+    unwrapKeyForGrant({ grantWrapKey: await deriveGrantWrapKey(secret, otherGrant), grantId: otherGrant, kind: 'folder', objectId: folderId, wrapped }),
+    'unwrap_failed',
+  )
+  await rejects(
+    unwrapKeyForGrant({ grantWrapKey: await deriveGrantWrapKey(randomBytes(32), grantId), grantId, kind: 'folder', objectId: folderId, wrapped }),
+    'unwrap_failed',
+  )
+})
+
+test('a grant on folder A opens A’s subtree and not its sibling B', async () => {
+  // RK ─┬─ A ── A1 ── file f
+  //     └─ B ── file g
+  const rk = randomBytes(32)
+  const fkA = randomBytes(32), fkA1 = randomBytes(32), fkB = randomBytes(32)
+  const cskF = randomBytes(32), cskG = randomBytes(32)
+  const wA1 = await wrapChainKey(fkA, fkA1)
+  const wF = await wrapChainKey(fkA1, cskF)
+  const wB = await wrapChainKey(rk, fkB)
+  const wG = await wrapChainKey(fkB, cskG)
+
+  const grantId = uuid(), idA = uuid()
+  const gk = await deriveGrantWrapKey(randomBytes(32), grantId)
+  const grantA = await wrapKeyForGrant({ grantWrapKey: gk, grantId, kind: 'folder', objectId: idA, key: fkA })
+
+  const a = await unwrapKeyForGrant({ grantWrapKey: gk, grantId, kind: 'folder', objectId: idA, wrapped: grantA })
+  const a1 = await unwrapChainKey(a, wA1)
+  assert.deepEqual(await unwrapChainKey(a1, wF), cskF)
+
+  // Every key the grant can reach fails on the sibling branch.
+  for (const k of [gk, a, a1]) {
+    await rejects(unwrapChainKey(k, wB), 'unwrap_failed')
+    await rejects(unwrapChainKey(k, wG), 'unwrap_failed')
+  }
+})
