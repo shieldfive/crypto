@@ -5,6 +5,17 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.0.0-rc.6
+
+### Added
+
+- `buildUploadProofV3` (`@shieldfive/crypto/vault`): the upload proof for a
+  PQ-hybrid object, in the frame the ShieldFive server verifies — base64 of
+  `[0x03][0x03] || HMAC-SHA256(proofKey, [0x03][0x03] || header || chunk_0)`.
+  Two clients now produce it (the web app and the MCP server's upload path) and
+  a second hand-written implementation is how they would silently diverge. The
+  test builds the same frame independently with `node:crypto` and compares.
+
 ## 1.0.0-rc.5 — 2026-09-18
 
 No change to any file-encryption suite. Adds `@shieldfive/crypto/vault`,
@@ -291,7 +302,7 @@ top-level exports that downstream consumers depend on.
   (it was pinned at `1.0.0-alpha.11`). The constant is informational
   only — it is never written into file output or any test vector.
 - Corrected a backwards source comment in the `aes-gcm-v2` suite: the
-  cross-file nonce-prefix space *widens* from 2^32 to 2^64 (the comment
+  cross-file nonce-prefix space _widens_ from 2^32 to 2^64 (the comment
   previously said "shrinks"). No behavior change — the README and
   CHANGELOG already described it correctly as widening.
 
@@ -314,9 +325,9 @@ top-level exports that downstream consumers depend on.
 ### Added
 
 - Cipher suite 0x04 `aes-gcm-v2`: 8-byte HKDF-derived nonce prefix
-  + 4-byte BE chunk counter. Widens the cross-file IV-collision
-  space from 2^32 to 2^64 while keeping the IV at 12 bytes. v1
-  (suite 0x01) stays decrypt-only on the umbrella export.
+  - 4-byte BE chunk counter. Widens the cross-file IV-collision
+    space from 2^32 to 2^64 while keeping the IV at 12 bytes. v1
+    (suite 0x01) stays decrypt-only on the umbrella export.
 - Optional sender-attribution signatures (`src/identity/sign.ts`).
   Detached Ed25519 (alg 0x01) over
   `header_unauthenticated_bytes || concat(chunk_macs)`, appended as
