@@ -1,8 +1,10 @@
 name: dist-tag
 
 # Manually move an npm dist-tag for @shieldfive/crypto WITHOUT an OTP — uses the
-# NPM_TOKEN automation secret (same one release.yml publishes with; automation
-# tokens bypass 2FA). Prereleases publish to their own channel (e.g. `beta`) and
+# NPM_TOKEN automation secret. release.yml no longer uses it (it publishes via
+# trusted publishing, which covers `npm publish` only), so this workflow is the
+# secret's one remaining user; if npm starts refusing it with EOTP here too,
+# move the tag from a terminal with `npm dist-tag add` instead. Prereleases publish to their own channel (e.g. `beta`) and
 # never move `latest` automatically, so this is the sanctioned way to promote a
 # published version to another tag, e.g. point `latest` at the newest beta:
 #

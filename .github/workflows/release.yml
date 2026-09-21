@@ -6,13 +6,14 @@ name: release
 # run, and shows a "verified" provenance badge on the npm package page — a real
 # supply-chain trust signal for a cryptography library.
 #
-# ── ONE-TIME SETUP (required before this works) ──────────────────────────────
-#   1. Create an npm token with publish access to @shieldfive/crypto:
-#        npmjs.com → Access Tokens → Generate New Token →
-#        "Automation" (automation tokens bypass 2FA, which CI needs), or a
-#        Granular token scoped to @shieldfive with read+write on the package.
-#   2. Add it as a repo secret named NPM_TOKEN:
-#        gh secret set NPM_TOKEN --repo shieldfive/crypto
+# ── ONE-TIME SETUP ───────────────────────────────────────────────────────────
+#   Trusted publishing (OIDC), not a token. npm restricts tokens that bypass
+#   2FA for direct publishes (EOTP in CI, seen on @shieldfive/mcp 2026-09-21);
+#   the replacement is for the registry to trust THIS workflow directly:
+#     npmjs.com → @shieldfive/crypto → Settings → Trusted Publisher →
+#       GitHub Actions · shieldfive/crypto · workflow release.yml
+#   No secret is involved: npm verifies this job's id-token (below), and the
+#   provenance statement comes out of the same exchange.
 #
 # ── RELEASE FLOW (same convention, minus the manual `npm publish`) ────────────
 #   merge the release PR → push an annotated tag vX.Y.Z at the merge commit →
@@ -52,8 +53,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          registry-url: 'https://registry.npmjs.org'
+          # No registry-url: it writes an .npmrc auth line expecting a token,
+          # and an empty one gets in the way of the OIDC exchange.
           cache: npm
+
+      # Trusted publishing needs npm 11.5.1 or newer; Node 20 ships npm 10.
+      - name: Upgrade npm
+        run: npm install -g npm@^11.5.1
 
       - name: Install dependencies
         run: npm ci
@@ -73,8 +79,7 @@ jobs:
           # Untrusted input (workflow_dispatch ref / pushed tag name) is passed
           # via env and never interpolated into the shell — git ref names permit
           # `$()`, backticks, `;`, `|`, `&`, so a `${{ ... }}` interpolation here
-          # is a command-injection sink in the job that holds NPM_TOKEN and
-          # id-token:write. Mirrors dist-tag.yml. (Security audit SF-01, 2026-07.)
+          # is a command-injection sink in the job that holds id-token:write. Mirrors dist-tag.yml. (Security audit SF-01, 2026-07.)
           TAG_REF: ${{ github.event.inputs.ref || github.ref_name }}
         run: |
           PKG_VERSION="$(node -p "require('./package.json').version")"
@@ -113,6 +118,6 @@ jobs:
             CHANNEL="latest"
           fi
           echo "Publishing $VER with provenance to dist-tag: $CHANNEL"
+          # OIDC: npm exchanges this job's GitHub identity for a short-lived
+          # publish credential. Nothing long-lived exists to leak.
           npm publish --provenance --access public --tag "$CHANNEL"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
