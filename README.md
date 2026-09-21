@@ -9,18 +9,18 @@
 [![Tests](https://img.shields.io/badge/tests-259%2F259-brightgreen.svg)](tests/)
 [![npm provenance](https://img.shields.io/badge/npm-provenance-blue?logo=npm)](https://www.npmjs.com/package/@shieldfive/crypto)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/shieldfive/crypto/badge)](https://securityscorecards.dev/viewer/?uri=github.com/shieldfive/crypto)
-[![Status](https://img.shields.io/badge/status-1.0.0--rc.1-blue.svg)](#status)
+[![Status](https://img.shields.io/badge/status-1.0.0-green.svg)](#status)
 <!-- Once registered at https://www.bestpractices.dev, add the earned badge:
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/<ID>/badge)](https://www.bestpractices.dev/projects/<ID>) -->
 
 
 ## Status & honest scope
 
-This library is a **release candidate** (`1.0.0-rc.1`). The v1 **wire format
-is frozen** — files written today will decrypt on every future v1 release —
-and the public TypeScript API is now stable; `1.0.0` follows once the RC has
-soaked. `1.0.0` means the API is stable under semantic versioning, **not**
-that the code has been audited. Those are two separate axes and we track them
+This library is at **`1.0.0`**. The v1 **wire format is frozen** — files
+written today will decrypt on every future v1 release — and the public
+TypeScript API is stable under semantic versioning, with one exception
+stated in [Status](#status): the `./vault` entry point is experimental.
+`1.0.0` means the API is stable, **not** that the code has been audited. Those are two separate axes and we track them
 separately (see [Status](#status)).
 
 **Audit status:** this library has **not** received a paid third-party
@@ -269,15 +269,25 @@ Requires Node 20+.
 
 ## Status
 
-**Release candidate (`1.0.0-rc.1`) — API frozen, format frozen.** This
-section tracks two independent axes; please don't conflate them.
+**`1.0.0` — API stable, format frozen.** This section tracks two
+independent axes; please don't conflate them.
 
 **API stability.** The v1 wire format is frozen — files written today
-decrypt on every future v1 release. The public TypeScript API is frozen for
-`1.0.0`; breaking changes will require a major-version bump. `1.0.0` means
-the API is stable under semantic versioning. It does **not** mean "audited."
+decrypt on every future v1 release. The public TypeScript API is stable
+under semantic versioning: a breaking change requires a major-version bump.
+The release candidate ran from `1.0.0-rc.1` (2026-07-14) to `1.0.0-rc.6`
+with additions and fixes only; no existing signature was removed or changed. `1.0.0` does **not** mean
+"audited."
 
-**Audit status (scoped to `v1.0.0-rc.1`).** `@shieldfive/crypto` has
+**Experimental: `@shieldfive/crypto/vault`.** The vault entry point
+(key-chain wraps, name envelopes, agent-grant wraps and upload proofs, added
+in `rc.5`/`rc.6`) is **not** covered by the semver guarantee until it is
+declared stable in a later minor release: its API may change in a minor
+version. The formats it reads and writes are the ones the ShieldFive web app
+already stores, specified in [`spec/vault-formats.md`](spec/vault-formats.md),
+and any change to them will be called out in this changelog.
+
+**Audit status (scoped to `v1.0.0`).** `@shieldfive/crypto` has
 **not** had a paid third-party security audit. The novel part of the
 design — the post-quantum-hybrid KEM combiner
 `K = HKDF-SHA-256(classical_share ‖ ml_kem_share, salt = file_id)`
@@ -293,7 +303,7 @@ notice stays in place for any version that predates that review.
 
 ```bash
 npm audit signatures   # npm provenance: tarball ↔ this source commit + CI run
-npm test               # 259 tests incl. deterministic KATs + adversarial vectors
+npm test               # 293 tests incl. deterministic KATs + adversarial vectors
 ```
 
 The [`tests/vectors/`](tests/vectors/) directory publishes reproducible vectors

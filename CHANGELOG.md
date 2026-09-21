@@ -5,7 +5,29 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 1.0.0-rc.6
+## 1.0.0 — 2026-09-21
+
+API-stability release. No change to any wire format or to any function since
+`1.0.0-rc.6`. The release candidate ran ten weeks (`rc.1`, 2026-07-14, to
+`rc.6`); every release in it added API or fixed behaviour without removing
+or changing an existing signature.
+
+### Changed
+
+- The package is stable under semantic versioning, with one stated
+  exception: **`@shieldfive/crypto/vault` is experimental** and may change in
+  a minor release until it is declared stable. It is three days old and backs
+  a feature still being evaluated. The formats it implements are the ones the
+  web app already stores (`spec/vault-formats.md`).
+
+### Documentation
+
+- README status and audit scope moved from `rc.1` to `1.0.0`; test count
+  updated to 293. Audit status is unchanged: no paid third-party audit, and
+  `1.0.0` does not claim one.
+- Added the missing `1.0.0-rc.4` entry below.
+
+## 1.0.0-rc.6 — 2026-09-21
 
 ### Added
 
@@ -41,6 +63,35 @@ formats the web app stores, plus the new agent-grant wrap.
 - `spec/vault-formats.md`, and vectors generated from an independent
   implementation (`@noble/hashes` Argon2id plus raw Web Crypto) in
   `tests/vectors/vault-vectors.json`.
+
+## 1.0.0-rc.4 — 2026-08-11
+
+(This entry was missing and was added in `1.0.0`, from the commits in
+#47 and #48.)
+
+### Fixed
+
+- **Signed files decrypt through the whole-blob API.** `decryptBlob` /
+  `decryptToBytes` rejected any bytes after the last chunk, so a file signed
+  by the streaming encoder could not be decrypted through the blob API, and
+  the trailing signature block was not surfaced. The blob readers now share
+  the streams' tail parser (`src/format/signature-tail.ts`): a well-formed
+  signature block is parsed and reported through a new optional `onSignature`
+  callback (verified against `expectedSignerPublicKey` when supplied), and
+  malformed trailing bytes are rejected.
+
+### Security
+
+Low-severity hardening from an external whitebox review:
+
+- Suites `0x01`, `0x02` and `0x04` now reject a non-zero reserved pad after
+  the wrapped-key field, as suite `0x03` already did. The encoder always
+  writes zeros, so files it produced are unaffected.
+- `V0EncryptOptions.contentKey` / `noncePrefix` now document the nonce-reuse
+  hazard of persisting that pair across plaintexts.
+- `spec/key-derivation.md` lists the three `shieldfive/v1/inbound/*` HKDF
+  labels in its forbidden cross-context list, and a unit test keeps that
+  list one-to-one with `HKDF_INFO`.
 
 ## 1.0.0-rc.3 — 2026-08-03
 
