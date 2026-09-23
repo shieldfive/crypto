@@ -491,8 +491,11 @@ export function publicKeyFingerprint(mlKemPublicKey: Uint8Array): string {
  *
  * `chunk_0` is the first frame INCLUDING its 4-byte big-endian length prefix.
  * The server re-reads exactly those ranges from storage and recomputes the MAC,
- * so a matching proof says the object storage holds is the object the client
- * encrypted — it does not, and cannot, say anything about the plaintext.
+ * so a matching proof says the header and first chunk frame storage holds are
+ * the ones the client encrypted. It commits to nothing after chunk_0: a
+ * truncated or replaced tail still verifies, and is caught only when the
+ * client decrypts (each chunk is AEAD-authenticated). It says nothing about
+ * the plaintext.
  *
  * It lives here because it is a keyed construction over ShieldFive's own
  * container format, and the clients that produce it (the web app, and the MCP
@@ -527,7 +530,18 @@ export async function buildUploadProofV3(options: {
   );
   const chunkZeroLength = view.getUint32(lengthOffset, false);
   const end = lengthOffset + LENGTH_PREFIX_BYTES + chunkZeroLength;
-  if (chunkZeroLength === 0 || ciphertext.length < end) {
+  // Match the server verifier's bounds: a frame is at least one ciphertext
+  // byte plus the 16-byte tag, and at most chunkSize plus the tag.
+  if (
+    chunkZeroLength < 1 + TAG_BYTES ||
+    chunkZeroLength > header.chunkSize + TAG_BYTES
+  ) {
+    throw new VaultCryptoError(
+      "invalid_input",
+      "first chunk length is outside the valid frame range",
+    );
+  }
+  if (ciphertext.length < end) {
     throw new VaultCryptoError(
       "invalid_input",
       "ciphertext is missing its first chunk",

@@ -373,6 +373,35 @@ test("the upload proof frame matches an independent implementation of the spec",
   );
 });
 
+test("the upload proof rejects a first chunk the server verifier would reject", async () => {
+  const { encryptStreamPqHybridV1 } =
+    await import("../../src/streams/pq-hybrid-v1.js");
+  const { generateMlKemKeypair } =
+    await import("../../src/suites/pq-hybrid-v1/index.js");
+  const { parseHeader } = await import("../../src/format/header.js");
+
+  const { ciphertext } = await encryptStreamPqHybridV1(
+    new Blob([new Uint8Array(100).fill(1)]).stream(),
+    {
+      recipientPublicKey: generateMlKemKeypair().publicKey,
+      envelopeKey: randomBytes(32),
+      plaintextSize: 100,
+    },
+  );
+  const bytes = new Uint8Array(await new Response(ciphertext).arrayBuffer());
+  const headerLength = parseHeader(bytes).headerLength;
+  const proofKeyHex = Buffer.from(randomBytes(32)).toString("hex");
+
+  // A chunk_0 length of 16 (tag only, no ciphertext byte) passed here before
+  // but the server rejects it; the builder now fails closed with it.
+  const short = Uint8Array.from(bytes);
+  new DataView(short.buffer).setUint32(headerLength, 16, false);
+  await rejects(
+    buildUploadProofV3({ proofKeyHex, ciphertext: short }),
+    "invalid_input",
+  );
+});
+
 test("the upload proof refuses a bad key or a truncated container", async () => {
   const bytes = new Uint8Array(64);
   await rejects(
