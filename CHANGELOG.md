@@ -21,7 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `vault`: `parseConnectionString` rejects non-canonical base64url, so one
   grant has exactly one string form.
 
-Reported by an independent researcher (rajinkoala), 2026-09-24.
+- `vault`: the `buildUploadProofV3` documentation now claims only what the
+  proof covers: the header and the chunk_0 frame. Chunks 1..n are protected by
+  per-chunk AEAD at decrypt time, not by the proof. The builder also rejects
+  chunk_0 lengths the server verifier rejects (below 1 + tag) (#55).
+
+Credits: the upload-proof scope finding was reported by andzis11
+(https://github.com/andzis11), 2026-09-23; the vault kdf, error-contract and
+connection-string findings by an independent researcher (rajinkoala),
+2026-09-24.
 
 ## 1.0.0 — 2026-09-21
 
