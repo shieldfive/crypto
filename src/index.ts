@@ -220,7 +220,7 @@ export async function autoDecryptBlob(
 }
 
 /** Library version, also written into format documentation. */
-export const SHIELDFIVE_CRYPTO_VERSION = '1.0.0'
+export const SHIELDFIVE_CRYPTO_VERSION = '1.0.1'
 
 /** Default cipher suite for new files when not specified by the caller. */
 export const DEFAULT_SUITE = SUITE.PQ_HYBRID_XCHACHA_MLKEM1024_V1
