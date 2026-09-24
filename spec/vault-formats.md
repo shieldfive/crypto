@@ -40,6 +40,11 @@ v6: AES-256-GCM(name key, iv, aad = UTF-8 of row UUID,  pt = UTF-8 name)
 ```
 
 If `kdf` is missing, a reader tries interactive first and then moderate.
+The stored `kdf` is server-writable data, so it may only narrow that search:
+`"interactive"` means interactive alone, and any other value is read as
+interactive then moderate. It never makes a reader start at the higher cost.
+A field that is not valid base64, or an `iv`/`tag`/`salt` of the wrong length,
+is `unsupported_envelope`.
 Writers always emit v6 with `kdf: "interactive"`. The password already
 carries 256 bits of entropy, so the cost level only exists for compatibility.
 

@@ -217,6 +217,44 @@ export function parseNameEnvelope(
   return env;
 }
 
+const NAME_IV_BYTES = 12;
+const NAME_TAG_BYTES = 16;
+
+/** Decode one base64 envelope field, inside the module's error contract. */
+function envelopeField(
+  value: string,
+  what: string,
+  length?: number,
+): Uint8Array {
+  let bytes: Uint8Array;
+  try {
+    bytes = base64ToBytes(value);
+  } catch {
+    throw new VaultCryptoError("unsupported_envelope", `${what} is not base64`);
+  }
+  if (length !== undefined && bytes.length !== length) {
+    throw new VaultCryptoError(
+      "unsupported_envelope",
+      `${what} must be ${length} bytes`,
+    );
+  }
+  return bytes;
+}
+
+/**
+ * The levels a reader tries, cheapest first. The stored `kdf` is data the
+ * server can rewrite, so it may only narrow the search, never raise the cost:
+ * "interactive" means interactive alone, anything else means interactive then
+ * moderate. An honest envelope relabelled "moderate" still opens at the
+ * interactive cost, and no envelope costs more than one legacy (kdf-less)
+ * envelope already did.
+ */
+function nameKdfLevels(envelope: NameEnvelope): NameKdfLevel[] {
+  return envelope.kdf === "interactive"
+    ? ["interactive"]
+    : ["interactive", "moderate"];
+}
+
 /**
  * Derive the per-envelope name key. The Argon2id password is the base64 TEXT
  * of the folder key, byte-for-byte what the web app passes to libsodium; the
@@ -257,7 +295,8 @@ export async function deriveNameKey(
  * Decrypt a v4 or v6 name. `rowId` is the database UUID of the row the name
  * belongs to and is REQUIRED for v6 (it is the AAD). An envelope written
  * without a `kdf` field is tried at interactive, then moderate, which is the
- * web app's own fallback order for a device that cannot know the level.
+ * web app's own fallback order for a device that cannot know the level. A
+ * stored `kdf` never raises the cost (see nameKdfLevels).
  */
 export async function decryptName(options: {
   envelope: NameEnvelope;
@@ -268,18 +307,15 @@ export async function decryptName(options: {
   if (envelope.v === 6 && !rowId) {
     throw new VaultCryptoError("invalid_input", "v6 names need the row id");
   }
-  const iv = base64ToBytes(envelope.iv);
-  const salt = base64ToBytes(envelope.salt);
+  const iv = envelopeField(envelope.iv, "iv", NAME_IV_BYTES);
+  const salt = envelopeField(envelope.salt, "salt", NAME_SALT_BYTES);
   const sealed = concatBytes([
-    base64ToBytes(envelope.ct),
-    base64ToBytes(envelope.tag),
+    envelopeField(envelope.ct, "ct"),
+    envelopeField(envelope.tag, "tag", NAME_TAG_BYTES),
   ]);
   const aad =
     envelope.v === 6 ? TEXT_ENCODER.encode(rowId as string) : undefined;
-  const levels: NameKdfLevel[] = envelope.kdf
-    ? [envelope.kdf]
-    : ["interactive", "moderate"];
-  for (const level of levels) {
+  for (const level of nameKdfLevels(envelope)) {
     const key = await deriveNameKey(folderKey, salt, level);
     const pt = await aesGcmOpen(key, iv, sealed, aad);
     if (pt) {
@@ -311,12 +347,13 @@ export async function decryptNameWithKey(options: {
     throw new VaultCryptoError("invalid_input", "v6 names need the row id");
   }
   const sealed = concatBytes([
-    base64ToBytes(envelope.ct),
-    base64ToBytes(envelope.tag),
+    envelopeField(envelope.ct, "ct"),
+    envelopeField(envelope.tag, "tag", NAME_TAG_BYTES),
   ]);
   const aad =
     envelope.v === 6 ? TEXT_ENCODER.encode(rowId as string) : undefined;
-  const pt = await aesGcmOpen(nameKey, base64ToBytes(envelope.iv), sealed, aad);
+  const iv = envelopeField(envelope.iv, "iv", NAME_IV_BYTES);
+  const pt = await aesGcmOpen(nameKey, iv, sealed, aad);
   if (pt) {
     try {
       return TEXT_DECODER.decode(pt);
@@ -341,11 +378,8 @@ export async function deriveNameKeyForEnvelope(options: {
   rowId?: string;
 }): Promise<Uint8Array> {
   const { envelope, parentKey, rowId } = options;
-  const salt = base64ToBytes(envelope.salt);
-  const levels: NameKdfLevel[] = envelope.kdf
-    ? [envelope.kdf]
-    : ["interactive", "moderate"];
-  for (const level of levels) {
+  const salt = envelopeField(envelope.salt, "salt", NAME_SALT_BYTES);
+  for (const level of nameKdfLevels(envelope)) {
     const nameKey = await deriveNameKey(parentKey, salt, level);
     try {
       await decryptNameWithKey(
@@ -471,11 +505,21 @@ function fromBase64Url(value: string): Uint8Array {
     );
   }
   const b64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  let bytes: Uint8Array;
   try {
-    return base64ToBytes(b64 + "=".repeat((4 - (b64.length % 4)) % 4));
+    bytes = base64ToBytes(b64 + "=".repeat((4 - (b64.length % 4)) % 4));
   } catch {
     throw new VaultCryptoError("invalid_connection_string", "bad base64url");
   }
+  // One value, one spelling: reject encodings whose final character carries
+  // non-zero padding bits, which decoders silently discard.
+  if (toBase64Url(bytes) !== value) {
+    throw new VaultCryptoError(
+      "invalid_connection_string",
+      "non-canonical base64url",
+    );
+  }
+  return bytes;
 }
 
 /** SHA-256 of an ML-KEM public key, hex. Pinned in the connection string. */
@@ -515,7 +559,15 @@ export async function buildUploadProofV3(options: {
       "proofKeyHex must be 32 bytes of hex",
     );
   }
-  const header = parseHeader(ciphertext);
+  let header: ReturnType<typeof parseHeader>;
+  try {
+    header = parseHeader(ciphertext);
+  } catch {
+    throw new VaultCryptoError(
+      "invalid_input",
+      "ciphertext does not start with a valid header",
+    );
+  }
   const lengthOffset = header.headerLength;
   if (ciphertext.length < lengthOffset + LENGTH_PREFIX_BYTES) {
     throw new VaultCryptoError(

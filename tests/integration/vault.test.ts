@@ -409,3 +409,93 @@ test("the upload proof refuses a bad key or a truncated container", async () => 
     "invalid_input",
   );
 });
+
+test("a stored kdf cannot raise the Argon2id cost of an honest name", async () => {
+  const folderKey = randomBytes(32);
+  const rowId = uuid();
+  const honest = await encryptNameV6({ name: "w2.pdf", folderKey, rowId });
+  assert.equal(honest.kdf, "interactive");
+  const t0 = performance.now();
+  const name = await decryptName({
+    envelope: { ...honest, kdf: "moderate" },
+    folderKey,
+    rowId,
+  });
+  const elapsed = performance.now() - t0;
+  assert.equal(name, "w2.pdf");
+  // Opens at the interactive level; a moderate derivation alone costs ~1 s.
+  const t1 = performance.now();
+  await decryptName({ envelope: honest, folderKey, rowId });
+  assert.ok(elapsed < (performance.now() - t1) * 3 + 100);
+});
+
+test("malformed envelope fields stay inside the VaultCryptoError contract", async () => {
+  const folderKey = randomBytes(32);
+  const rowId = uuid();
+  const good = await encryptNameV6({ name: "a", folderKey, rowId });
+  for (const f of ["ct", "iv", "tag", "salt"] as const) {
+    await rejects(
+      decryptName({
+        envelope: { ...good, [f]: "not!base64!" },
+        folderKey,
+        rowId,
+      }),
+      "unsupported_envelope",
+    );
+    await rejects(
+      decryptNameWithKey({
+        envelope: { ...good, [f]: "not!base64!" },
+        nameKey: randomBytes(32),
+        rowId,
+      }),
+      f === "salt" ? "name_decrypt_failed" : "unsupported_envelope",
+    );
+  }
+  await rejects(
+    decryptName({ envelope: { ...good, iv: "AAAA" }, folderKey, rowId }),
+    "unsupported_envelope",
+  );
+});
+
+test("upload proof rejects a malformed header as invalid_input", async () => {
+  const proofKeyHex = "ab".repeat(32);
+  await rejects(
+    buildUploadProofV3({ proofKeyHex, ciphertext: new Uint8Array(64) }),
+    "invalid_input",
+  );
+  const junk = randomBytes(256);
+  junk.set([0x00, 0x00, 0x00, 0x00], 0);
+  await rejects(
+    buildUploadProofV3({ proofKeyHex, ciphertext: junk }),
+    "invalid_input",
+  );
+});
+
+test("connection strings have exactly one spelling per token", () => {
+  const cred = createGrantCredential({
+    grantId: uuid(),
+    mlKemPublicKey: randomBytes(1568),
+  });
+  const s = formatConnectionString(cred);
+  assert.deepEqual(parseConnectionString(s).token, cred.token);
+  const parts = s.split(".");
+  const tokenIdx = parts.length - 3;
+  const tok = parts[tokenIdx] as string;
+  const alphabet =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  let accepted = 0;
+  for (const c of alphabet) {
+    const variant = [...parts];
+    variant[tokenIdx] = tok.slice(0, -1) + c;
+    try {
+      const parsed = parseConnectionString(variant.join("."));
+      if (Buffer.from(parsed.token).equals(Buffer.from(cred.token)))
+        accepted += 1;
+    } catch (e) {
+      assert.ok(
+        e instanceof VaultCryptoError && e.code === "invalid_connection_string",
+      );
+    }
+  }
+  assert.equal(accepted, 1);
+});
