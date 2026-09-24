@@ -5,6 +5,24 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Security
+
+- `vault`: a name envelope's stored `kdf` can no longer raise the Argon2id cost
+  a reader pays. `"interactive"` means interactive alone; any other value is
+  read as interactive then moderate. Previously a server-rewritten
+  `kdf: "moderate"` forced ~7x CPU and 4x memory per name.
+- `vault`: malformed base64 in `ct`/`iv`/`tag`/`salt`, or a wrong-length
+  `iv`/`tag`/`salt`, now throws `VaultCryptoError("unsupported_envelope")`
+  instead of a raw `DOMException`.
+- `vault`: `buildUploadProofV3` maps header parse failures to
+  `VaultCryptoError("invalid_input")` instead of leaking `HeaderError`.
+- `vault`: `parseConnectionString` rejects non-canonical base64url, so one
+  grant has exactly one string form.
+
+Reported by an independent researcher (rajinkoala), 2026-09-24.
+
 ## 1.0.0 — 2026-09-21
 
 API-stability release. No change to any wire format or to any function since
