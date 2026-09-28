@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Credits: the upload-proof scope finding was reported by andzis11
 (https://github.com/andzis11), 2026-09-23; the vault kdf, error-contract and
-connection-string findings by an independent researcher (rajinkoala),
+connection-string findings by an independent researcher (koalarajin),
 2026-09-24.
 
 ## 1.0.0 — 2026-09-21
