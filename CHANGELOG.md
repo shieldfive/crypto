@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a reader pays. `"interactive"` means interactive alone; any other value is
   read as interactive then moderate. Previously a server-rewritten
   `kdf: "moderate"` forced ~7x CPU and 4x memory per name.
+  Reporter re-ran the PoC on 1.0.1 (2026-09-30): a relabelled `moderate`
+  envelope now opens in 159 ms versus 1152 ms on 1.0.0 (0.9x vs 6.8x of the
+  interactive cost); a 200-name folder lists in 32 s versus 230 s. Expected
+  residual: a row that cannot be opened at all (wrong key) still costs both
+  levels before failing.
 - `vault`: malformed base64 in `ct`/`iv`/`tag`/`salt`, or a wrong-length
   `iv`/`tag`/`salt`, now throws `VaultCryptoError("unsupported_envelope")`
   instead of a raw `DOMException`.
