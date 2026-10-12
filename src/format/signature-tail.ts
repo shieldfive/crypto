@@ -62,6 +62,42 @@ export function finalizeSignatureMetadata(input: {
   trailingBytes: Uint8Array
   transcriptDigest: Uint8Array
   expectedSignerPublicKey: Uint8Array | undefined
+  /** See `assertSignatureRequirement`. Defaults to false. */
+  signatureRequired?: boolean
+}): VerifiedSignature | null {
+  const result = parseAndVerifySignature(input)
+  if (input.signatureRequired === true) {
+    if (result === null) throw new HeaderError('signature_required_missing')
+    if (result.verified !== true) {
+      throw new HeaderError('signature_required_invalid')
+    }
+  }
+  return result
+}
+
+/**
+ * Validate the `signatureRequired` / `expectedSignerPublicKey` pair on a
+ * decrypt call before any work is done, and return the normalised flag.
+ * Requiring a signature without saying whose is a caller bug: there is
+ * nothing to verify against, so it throws instead of silently accepting.
+ */
+export function assertSignatureRequirement(options: {
+  expectedSignerPublicKey?: Uint8Array
+  signatureRequired?: boolean
+}): boolean {
+  const required = options.signatureRequired === true
+  if (required && !options.expectedSignerPublicKey) {
+    throw new RangeError(
+      'decrypt: signatureRequired needs expectedSignerPublicKey (the key the file must be signed by)',
+    )
+  }
+  return required
+}
+
+function parseAndVerifySignature(input: {
+  trailingBytes: Uint8Array
+  transcriptDigest: Uint8Array
+  expectedSignerPublicKey: Uint8Array | undefined
 }): VerifiedSignature | null {
   if (input.trailingBytes.length === 0) {
     return null

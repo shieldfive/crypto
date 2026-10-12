@@ -5,6 +5,29 @@ All notable changes to `@shieldfive/crypto` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- `signatureRequired` option on every decryptor that accepts
+  `expectedSignerPublicKey` (whole-blob `decryptBlob`/`decryptToBytes` for
+  suites 0x01, 0x02, 0x03, 0x04 and both streaming decoders). When true,
+  decryption fails with `HeaderError` `signature_required_missing` (no
+  signature block, e.g. stripped) or `signature_required_invalid` (wrong
+  signer, bad signature, unsupported algorithm); passing it without
+  `expectedSignerPublicKey` throws `RangeError`. Default false, so existing
+  callers and unsigned/legacy files behave exactly as before. Streaming
+  decoders enforce it at flush: drain the plaintext and treat a stream error
+  as a rejection before using the output.
+
+### Performance
+
+- Streaming encoders/decoders no longer copy their whole pending buffer on
+  every append and consume (quadratic for small reads, e.g. a 5 MiB chunk
+  arriving in 16 KiB network reads). They use an internal FIFO byte queue
+  with amortised O(1) copying per byte. Ciphertext format and public API are
+  unchanged.
+
 ## 1.0.1 — 2026-09-24
 
 ### Security
