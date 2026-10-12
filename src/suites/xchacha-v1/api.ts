@@ -34,6 +34,7 @@ import {
 } from '../../internal/encoding.js'
 import { SenderSigTranscript } from '../../identity/sign.js'
 import {
+  assertSignatureRequirement,
   finalizeSignatureMetadata,
   type VerifiedSignature,
 } from '../../format/signature-tail.js'
@@ -152,6 +153,15 @@ export interface DecryptOptions {
    */
   expectedSignerPublicKey?: Uint8Array
   /**
+   * When true, decryption FAILS unless the file carries a trailing
+   * signature block that verifies against `expectedSignerPublicKey`
+   * (which must then be supplied). Use this wherever the caller relies
+   * on sender attribution: without it, an unsigned or wrongly-signed file
+   * still decrypts and only `signature.verified` tells them apart.
+   * Defaults to false (legacy/unsigned files decrypt as before).
+   */
+  signatureRequired?: boolean
+  /**
    * Called once, after the plaintext is fully decrypted, with the file's
    * sender-attribution signature — or `null` for a legacy/unsigned file.
    * Callers that require attribution MUST gate on
@@ -219,6 +229,7 @@ export async function decryptBlob(
   // Rebuild the sender-attribution transcript only when verifying, so an
   // unsigned decrypt pays nothing for the extra hash over ciphertext.
   const expectedSignerPublicKey = options.expectedSignerPublicKey
+  const signatureRequired = assertSignatureRequirement(options)
   const transcript = expectedSignerPublicKey ? new SenderSigTranscript() : null
   transcript?.absorbHeader(parsed.unauthenticatedBytes, parsed.totalChunks)
 
@@ -277,6 +288,7 @@ export async function decryptBlob(
     trailingBytes,
     transcriptDigest: transcript ? transcript.digest() : new Uint8Array(32),
     expectedSignerPublicKey,
+    signatureRequired,
   })
   options.onSignature?.(signature)
 

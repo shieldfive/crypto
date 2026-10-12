@@ -49,6 +49,7 @@ import {
   SUITE,
 } from '../internal/types.js'
 import { concatBytes, readUint32BE, uint32BE } from '../internal/encoding.js'
+import { ByteQueue } from '../internal/byte-queue.js'
 import { hmacSha256 } from '../internal/hmac.js'
 import { randomBytes } from '../internal/runtime.js'
 import {
@@ -63,6 +64,7 @@ import {
   type DecryptionMetadata,
   finalizeSignatureMetadata,
 } from './aes-gcm-v1.js'
+import { assertSignatureRequirement } from '../format/signature-tail.js'
 
 export type { DecryptionMetadata, VerifiedSignature } from './aes-gcm-v1.js'
 
@@ -196,7 +198,7 @@ export function createPqHybridV1EncryptStream(
   //   - context (lazily initialized)
   //   - signature transcript (present only when signing): commits to the
   //     header and every chunk's full ciphertext, hashed incrementally
-  let pending = new Uint8Array(0)
+  const pending = new ByteQueue()
   let chunkIndex = 0
   let bytesConsumed = 0
   let contextPromise: ReturnType<typeof createChunkContext> | null = null
@@ -250,18 +252,11 @@ export function createPqHybridV1EncryptStream(
         return
       }
       // Append to pending buffer
-      const merged = new Uint8Array(pending.length + chunk.length)
-      merged.set(pending, 0)
-      merged.set(chunk, pending.length)
-      pending = merged
+      pending.append(chunk)
 
       // Drain whole chunks
       while (pending.length >= chunkSize && chunkIndex < totalChunks - 1) {
-        const slice = pending.subarray(0, chunkSize)
-        await emitChunk(slice, controller)
-        pending = pending.subarray(chunkSize)
-        // Subarray shares the buffer; copy out so we can drop the rest.
-        pending = pending.slice(0)
+        await emitChunk(pending.take(chunkSize), controller)
       }
     },
     async flush(controller) {
@@ -280,9 +275,7 @@ export function createPqHybridV1EncryptStream(
         const sliceSize = isLastIteration
           ? pending.length // final chunk: whatever's left
           : chunkSize
-        const slice = pending.subarray(0, sliceSize)
-        await emitChunk(slice, controller)
-        pending = pending.subarray(sliceSize).slice(0)
+        await emitChunk(pending.take(sliceSize), controller)
       }
       if (pending.length !== 0) {
         controller.error(
@@ -348,6 +341,15 @@ export type PqHybridV1DecryptStreamOptions =
        * for the verification semantics — they are identical here.
        */
       expectedSignerPublicKey?: Uint8Array
+      /**
+       * When true, decryption FAILS unless the file carries a trailing
+       * signature block that verifies against `expectedSignerPublicKey`
+       * (which must then be supplied). Use this wherever the caller relies
+       * on sender attribution: without it, an unsigned or wrongly-signed file
+       * still decrypts and only `signature.verified` tells them apart.
+       * Defaults to false (legacy/unsigned files decrypt as before).
+       */
+      signatureRequired?: boolean
     }
   | {
       /**
@@ -370,6 +372,15 @@ export type PqHybridV1DecryptStreamOptions =
       envelopeKey?: undefined
       /** See sibling variant. */
       expectedSignerPublicKey?: Uint8Array
+      /**
+       * When true, decryption FAILS unless the file carries a trailing
+       * signature block that verifies against `expectedSignerPublicKey`
+       * (which must then be supplied). Use this wherever the caller relies
+       * on sender attribution: without it, an unsigned or wrongly-signed file
+       * still decrypts and only `signature.verified` tells them apart.
+       * Defaults to false (legacy/unsigned files decrypt as before).
+       */
+      signatureRequired?: boolean
     }
 
 export interface PqHybridV1DecryptStreamResult {
@@ -400,6 +411,7 @@ export function createPqHybridV1DecryptStream(
   const recipientSecretKey = options.recipientSecretKey
   const envelopeKey = options.envelopeKey
   const expectedSignerPublicKey = options.expectedSignerPublicKey
+  const signatureRequired = assertSignatureRequirement(options)
 
   let resolveMetadata!: (m: DecryptionMetadata) => void
   let rejectMetadata!: (err: unknown) => void
@@ -430,7 +442,7 @@ export function createPqHybridV1DecryptStream(
   //   0 = waiting for header bytes
   //   1 = streaming chunks: alternating length-prefix + ciphertext
   let phase: 0 | 1 = 0
-  let buffer = new Uint8Array(0)
+  const buffer = new ByteQueue()
   let parsedHeader: ReturnType<typeof parseHeader> | null = null
   let chunkIndex = 0
   let bytesEmitted = 0
@@ -441,16 +453,11 @@ export function createPqHybridV1DecryptStream(
   const transcript = new SenderSigTranscript()
 
   function append(input: Uint8Array): void {
-    const merged = new Uint8Array(buffer.length + input.length)
-    merged.set(buffer, 0)
-    merged.set(input, buffer.length)
-    buffer = merged
+    buffer.append(input)
   }
 
   function consume(n: number): Uint8Array {
-    const out = buffer.subarray(0, n).slice(0)
-    buffer = buffer.subarray(n).slice(0)
-    return out
+    return buffer.take(n)
   }
 
   async function tryParseHeader(): Promise<boolean> {
@@ -478,8 +485,8 @@ export function createPqHybridV1DecryptStream(
       HEADER_SIZES.TOTAL_CHUNKS +
       HEADER_SIZES.PLAINTEXT_SIZE
     const suitePayloadLen =
-      (buffer[suitePayloadLenOffset]! << 8) |
-      buffer[suitePayloadLenOffset + 1]!
+      (buffer.byteAt(suitePayloadLenOffset) << 8) |
+      buffer.byteAt(suitePayloadLenOffset + 1)
     const fullHeaderLen =
       suitePayloadLenOffset +
       HEADER_SIZES.SUITE_PAYLOAD_LEN +
@@ -620,11 +627,11 @@ export function createPqHybridV1DecryptStream(
             throw new HeaderError('plaintext_size_mismatch')
           }
           const signatureResult = finalizeSignatureMetadata({
-            trailingBytes: buffer,
+            trailingBytes: buffer.takeAll(),
             transcriptDigest: transcript.digest(),
             expectedSignerPublicKey,
+            signatureRequired,
           })
-          buffer = new Uint8Array(0)
           resolveMetadata({ signature: signatureResult })
         } catch (err) {
           controller.error(err as Error)
