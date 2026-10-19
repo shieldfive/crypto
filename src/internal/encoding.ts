@@ -29,6 +29,17 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString('base64')
 }
 
+/**
+ * Remove trailing `=` padding characters. Linear time: a single backward scan,
+ * unlike `/=+$/`, which backtracks quadratically on long runs of `=` that are
+ * not at the end of the string.
+ */
+export function stripBase64Padding(value: string): string {
+  let end = value.length
+  while (end > 0 && value.charCodeAt(end - 1) === 61 /* '=' */) end -= 1
+  return end === value.length ? value : value.slice(0, end)
+}
+
 export function base64ToBytes(value: string): Uint8Array {
   if (typeof value !== 'string') {
     throw new TypeError('base64ToBytes: input must be a string')

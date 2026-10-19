@@ -16,6 +16,7 @@ import {
   readUint16BE,
   readUint32BE,
   readUint64BE,
+  stripBase64Padding,
   uint16BE,
   uint32BE,
   uint64BE,
@@ -115,4 +116,44 @@ test('read functions reject insufficient bytes', () => {
   assert.throws(() => readUint16BE(new Uint8Array([1])), /insufficient/)
   assert.throws(() => readUint32BE(new Uint8Array([1, 2, 3])), /insufficient/)
   assert.throws(() => readUint64BE(new Uint8Array(7)), /insufficient/)
+})
+
+// ---------------------------------------------------------------------------
+// stripBase64Padding — replaces `.replace(/=+$/, '')` (CodeQL js/polynomial-redos)
+// ---------------------------------------------------------------------------
+
+const legacyStrip = (s: string): string => s.replace(/=+$/, '')
+
+test('stripBase64Padding: matches the old /=+$/ regex on fixed cases', () => {
+  const cases = ['', '=', '==', '===', 'a', 'a=', 'a==', 'ab=c', '=a', '=a=', 'QUJD', 'QUI=', 'QQ==', 'a=b==', '====x']
+  for (const c of cases) assert.equal(stripBase64Padding(c), legacyStrip(c), JSON.stringify(c))
+})
+
+test('stripBase64Padding: matches the old regex on every bytesToBase64 output for 0..64 random bytes', () => {
+  for (let len = 0; len <= 64; len += 1) {
+    for (let k = 0; k < 20; k += 1) {
+      const bytes = new Uint8Array(len).map(() => Math.floor(Math.random() * 256))
+      const b64 = bytesToBase64(bytes)
+      assert.equal(stripBase64Padding(b64), legacyStrip(b64))
+    }
+  }
+})
+
+test('stripBase64Padding: matches the old regex on random strings over {=, a}', () => {
+  for (let k = 0; k < 2000; k += 1) {
+    const n = Math.floor(Math.random() * 12)
+    let s = ''
+    for (let i = 0; i < n; i += 1) s += Math.random() < 0.6 ? '=' : 'a'
+    assert.equal(stripBase64Padding(s), legacyStrip(s), JSON.stringify(s))
+  }
+})
+
+test('stripBase64Padding: linear time on pathological input', () => {
+  // `/=+$/` takes seconds on 50k '=' followed by a non-'=' (quadratic
+  // backtracking). The scan must finish 1M of them almost instantly.
+  const evil = '='.repeat(1_000_000) + 'x'
+  const t0 = performance.now()
+  assert.equal(stripBase64Padding(evil), evil)
+  assert.equal(stripBase64Padding('='.repeat(1_000_000)), '')
+  assert.ok(performance.now() - t0 < 200, 'stripBase64Padding is not linear')
 })
