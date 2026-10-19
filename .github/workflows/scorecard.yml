@@ -18,10 +18,13 @@ name: Scorecard supply-chain security
 #        - enable branch protection on main (Settings → Branches), and
 #        - pin third-party actions by commit SHA instead of tag (see note below).
 #
-# NOTE ON PINNING: to match the existing workflows this file pins actions by tag
-# (@v4 etc.). Scorecard's "Pinned-Dependencies" check rewards full 40-char commit
-# SHAs. Pinning every `uses:` in this repo to a SHA (with a `# vX.Y.Z` comment)
-# is the single change that most improves the score.
+# NOTE ON PINNING: every action here is pinned to a full commit SHA with a
+# `# vX.Y.Z` comment. ossf/scorecard-action publishes NO floating major tag
+# (there is no `v2`, only v2.x.y), so `@v2` failed to resolve on every run
+# ("unable to find version `v2`"). Bump by SHA; Dependabot can track the comment.
+# The action only runs on the default branch (or a pull_request event): a
+# workflow_dispatch on any other branch exits with "only default branch is
+# supported", so a change here is verified by the first run after merge.
 
 on:
   branch_protection_rule:
@@ -43,12 +46,12 @@ jobs:
       id-token: write        # OIDC — publish results to the public OpenSSF API (badge)
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
 
       - name: Run analysis
-        uses: ossf/scorecard-action@v2
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
         with:
           results_file: results.sarif
           results_format: sarif
@@ -57,13 +60,13 @@ jobs:
           publish_results: true
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: SARIF file
           path: results.sarif
           retention-days: 5
 
       - name: Upload SARIF to code-scanning
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: results.sarif
