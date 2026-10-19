@@ -35,6 +35,7 @@ import {
   bytesToHex,
   concatBytes,
   hexToBytes,
+  stripBase64Padding,
 } from "../internal/encoding.js";
 import { parseHeader } from "../format/header.js";
 import { hmacSha256 } from "../internal/hmac.js";
@@ -488,10 +489,9 @@ function assertUuid(value: string, what: string): void {
 }
 
 function toBase64Url(bytes: Uint8Array): string {
-  return bytesToBase64(bytes)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+  return stripBase64Padding(
+    bytesToBase64(bytes).replace(/\+/g, "-").replace(/\//g, "_"),
+  );
 }
 
 function fromBase64Url(value: string): Uint8Array {
