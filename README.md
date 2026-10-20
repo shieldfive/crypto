@@ -16,7 +16,7 @@
 
 ## Status & honest scope
 
-This library is at **`1.0.0`**. The v1 **wire format is frozen** — files
+This library is at **`1.0.1`** (the `1.0` line). The v1 **wire format is frozen** — files
 written today will decrypt on every future v1 release — and the public
 TypeScript API is stable under semantic versioning, with one exception
 stated in [Status](#status): the `./vault` entry point is experimental.
