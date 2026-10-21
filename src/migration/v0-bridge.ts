@@ -130,6 +130,11 @@ async function sha1Hex(bytes: Uint8Array): Promise<string> {
  *
  * **Key handling:** the caller must bring their own pre-unwrapped 32-byte
  * content key. This module does not wrap or unwrap keys.
+ *
+ * @deprecated For migration fixtures only. v0 has no truncation detection,
+ * no file_id binding and no chunk AAD (spec/format-v0.md), so a file cut at
+ * a chunk boundary decrypts to shorter plaintext without an error. New
+ * writes must use a v1 suite.
  */
 export async function encryptV0(
   options: V0EncryptOptions,

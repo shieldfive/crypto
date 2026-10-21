@@ -69,9 +69,17 @@ v1-aware applications:
   download/re-upload them or via batch re-encryption.
 - MUST NOT issue new v0 writes once a v1 deployment is live.
 
-The reference v0 implementation lives in `src/suites/aes-gcm-v0/` and
-exposes only a `decryptV0` function. There is no `encryptV0` exported
-symbol; this is intentional.
+The reference v0 reader lives in `src/suites/aes-gcm-v0/` (exported as
+`@shieldfive/crypto/legacy-v0`). It exposes `decryptV0`, `decryptV0ToBytes`
+and `looksLikeV0`, a heuristic detector that applications MUST NOT use for
+routing (see the dispatch rule in `format-v1.md`).
+
+A v0 writer, `encryptV0`, is exported only from
+`@shieldfive/crypto/migration/v0`. It exists so Phase-1 migration tooling
+and tests can produce byte-compatible v0 fixtures. It MUST NOT be used for
+new writes: v0 has no truncation detection, no `file_id` binding and no
+chunk AAD, so a v0 file cut at a chunk boundary decrypts to shorter
+plaintext without an error. New writes MUST use a v1 suite.
 
 ## Security note
 
