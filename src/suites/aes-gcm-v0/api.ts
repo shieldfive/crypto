@@ -141,6 +141,10 @@ export async function decryptV0ToBytes(
  * Detect whether a blob is v0 (legacy) by checking the absence of the v1
  * magic prefix. Use only when out-of-band metadata is unavailable. For
  * normal application use, the database flag `cipher_version` is canonical.
+ *
+ * @deprecated Not a dispatcher. spec/format-v1.md requires routing by an
+ * explicit version field and forbids cross-format auto-detection; this
+ * heuristic is for recovery tooling only.
  */
 export async function looksLikeV0(blob: Blob): Promise<boolean> {
   if (blob.size < 5) return true // too small to be v1

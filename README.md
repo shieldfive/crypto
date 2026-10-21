@@ -160,7 +160,7 @@ const plaintext = await decryptV0({
 })
 ```
 
-There is no `encryptV0`. New writes must use a v1 suite.
+New writes must use a v1 suite. A v0 writer (`encryptV0`) is exported only from `@shieldfive/crypto/migration/v0`, for producing migration fixtures; v0 has no truncation detection, so never use it for real data.
 
 ### Decrypting an exported ShieldFive backup
 

@@ -560,7 +560,9 @@ magic/suite/file_id bytes do not form a valid GCM tag). A v0 blob fed to
 `parseHeader` fails the magic-byte check with probability `1 - 2^-40`
 per file. Application dispatchers MUST route by an explicit version
 field (e.g. a database column) and MUST NOT auto-detect across formats.
-The library does not expose cross-format auto-detection.
+The library exports one heuristic detector, `looksLikeV0`
+(`@shieldfive/crypto/legacy-v0`), for recovery tooling that has lost its
+metadata. It is not a dispatcher, and the rule above still applies to it.
 
 ## Test vectors
 

@@ -30,6 +30,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The default write path, which emits an all-zero pad, is unchanged. Reported
   by 0xanarki.
 
+### Documentation
+
+- `spec/format-v0.md`, `spec/format-v1.md` and the README said the library
+  exports no `encryptV0` and no cross-format auto-detection, but it exports
+  both: `encryptV0` from `./migration/v0` and `looksLikeV0` from
+  `./legacy-v0`. The documents now describe both exports accurately: the v0
+  writer is for migration fixtures only, because v0 has no truncation
+  detection, and `looksLikeV0` is a recovery heuristic, not a dispatcher.
+  Both functions are marked `@deprecated`. Neither export is removed in 1.x.
+  Reported by 0xanarki.
+
 ### Performance
 
 - Streaming encoders/decoders no longer copy their whole pending buffer on
