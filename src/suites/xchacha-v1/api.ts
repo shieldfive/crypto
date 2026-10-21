@@ -97,6 +97,10 @@ export async function encryptBlob(
       `encryptBlob: suitePayloadOverride must be ${XCHACHA_V1_SUITE_PAYLOAD_LENGTH} bytes`,
     )
   }
+  // Run the reader's own payload check on the writer side, so the library
+  // never emits a file its readers refuse (a non-zero reserved pad passed
+  // through suitePayloadOverride). Throws RangeError like the checks above.
+  parseXChaChaV1SuitePayload(suitePayload)
 
   const header = await buildAuthenticatedHeader(
     {
