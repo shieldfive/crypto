@@ -113,6 +113,10 @@ export async function encryptBlob(
       `encryptBlob: suitePayloadOverride must be ${AES_GCM_V2_SUITE_PAYLOAD_LENGTH} bytes`,
     )
   }
+  // Run the reader's own payload check on the writer side, so the library
+  // never emits a file its readers refuse (a non-zero reserved pad passed
+  // through suitePayloadOverride). Throws RangeError like the checks above.
+  parseAesGcmV2SuitePayload(suitePayload)
 
   const header = await buildAuthenticatedHeader(
     {

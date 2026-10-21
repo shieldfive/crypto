@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   decoders enforce it at flush: drain the plaintext and treat a stream error
   as a rejection before using the output.
 
+### Fixed
+
+- The 0x01, 0x02 and 0x04 whole-blob `encryptBlob` and the 0x01
+  `createAesGcmV1EncryptStream` now run their reader's `suite_payload` check
+  on a caller-supplied `suitePayloadOverride`, and throw `RangeError` when its
+  reserved pad is non-zero. Before, they wrote a file that the library's own
+  reader refused. 3bdad68 and de8be40 had closed this on the reader side only.
+  The default write path, which emits an all-zero pad, is unchanged. Reported
+  by 0xanarki.
+
 ### Performance
 
 - Streaming encoders/decoders no longer copy their whole pending buffer on
