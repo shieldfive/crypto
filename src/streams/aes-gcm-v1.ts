@@ -149,6 +149,10 @@ export function createAesGcmV1EncryptStream(
       `encrypt stream: suitePayloadOverride must be ${AES_GCM_V1_SUITE_PAYLOAD_LENGTH} bytes`,
     )
   }
+  // Run the reader's own payload check on the writer side, so the library
+  // never emits a file its readers refuse (a non-zero reserved pad passed
+  // through suitePayloadOverride). Throws RangeError like the checks above.
+  parseAesGcmV1SuitePayload(suitePayload)
 
   const ed25519SecretKey = options.ed25519SecretKey
   if (ed25519SecretKey && ed25519SecretKey.length !== ED25519_SECRET_KEY_LENGTH) {
