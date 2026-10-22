@@ -6,17 +6,17 @@
 
 [![npm](https://img.shields.io/npm/v/@shieldfive/crypto?logo=npm&color=cb3837)](https://www.npmjs.com/package/@shieldfive/crypto)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-298%2F298-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-319%2F319-brightgreen.svg)](tests/)
 [![npm provenance](https://img.shields.io/badge/npm-provenance-blue?logo=npm)](https://www.npmjs.com/package/@shieldfive/crypto)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/shieldfive/crypto/badge)](https://securityscorecards.dev/viewer/?uri=github.com/shieldfive/crypto)
-[![Status](https://img.shields.io/badge/status-1.0.1-green.svg)](#status)
+[![Status](https://img.shields.io/badge/status-1.1.0-green.svg)](#status)
 <!-- Once registered at https://www.bestpractices.dev, add the earned badge:
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/<ID>/badge)](https://www.bestpractices.dev/projects/<ID>) -->
 
 
 ## Status & honest scope
 
-This library is at **`1.0.1`** (the `1.0` line). The v1 **wire format is frozen** — files
+This library is at **`1.1.0`** (the `1.x` line). The v1 **wire format is frozen** — files
 written today will decrypt on every future v1 release — and the public
 TypeScript API is stable under semantic versioning, with one exception
 stated in [Status](#status): the `./vault` entry point is experimental.
@@ -31,7 +31,7 @@ grant-funded options). [Status](#status) states exactly what has and has not
 been reviewed, and what you can verify yourself without trusting us.
 
 The design choices documented in [`spec/`](spec/) are deliberate and
-reviewable. The implementation is covered by 298 passing tests including
+reviewable. The implementation is covered by 319 passing tests including
 truncation, reordering, splice, and tampering detection across all four
 suites. That is enough for internal dogfooding and for building on with
 eyes open. It is **not** enough to claim "most secure crypto library" —
@@ -303,7 +303,7 @@ notice stays in place for any version that predates that review.
 
 ```bash
 npm audit signatures   # npm provenance: tarball ↔ this source commit + CI run
-npm test               # 298 tests incl. deterministic KATs + adversarial vectors
+npm test               # 319 tests incl. deterministic KATs + adversarial vectors
 ```
 
 The [`tests/vectors/`](tests/vectors/) directory publishes reproducible vectors
