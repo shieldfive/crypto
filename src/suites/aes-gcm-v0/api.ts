@@ -1,9 +1,12 @@
 /**
  * Cipher suite "0x00" / v0: legacy AES-256-GCM, READ-ONLY.
  *
- * This module decrypts files written by the pre-v1 ShieldFive client.
- * It is intentionally read-only: there is no `encryptV0` exported symbol,
- * and applications MUST NOT write new files in this format.
+ * This module decrypts files written by the pre-v1 ShieldFive client. It
+ * exports no writer. The library does export one, `encryptV0` from
+ * `@shieldfive/crypto/migration/v0`, solely to produce migration fixtures;
+ * applications MUST NOT write new files in this format (v0 has no truncation
+ * detection; see `spec/format-v0.md`). `looksLikeV0` below is a recovery
+ * heuristic, never a dispatcher.
  *
  * v0 wire format (described in `spec/format-v0.md`):
  *
