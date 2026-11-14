@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `(content_key, file_id)`. The spec now states that bound and forbids
   reusing the pair across suites. Informational, no reachable impact; the
   library's writers create a fresh pair per file. No code change (#76).
-  Reported by an external researcher.
+  Reported by S.Hari Prasanth.
 
 ## 1.1.0 — 2026-10-22
 
