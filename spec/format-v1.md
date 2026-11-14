@@ -399,9 +399,18 @@ files written before `0x04` existed stay readable.
   This is bit-for-bit identical to the `0x01` chunk-key derivation — same
   HKDF `info` string (`shieldfive/v1/aes-gcm/chunk-key`), same inputs. A
   `0x01` file and a `0x04` file sharing a `content_key` and `file_id`
-  derive the same chunk key. They never collide on AEAD inputs, because
-  the nonce-prefix derivation below uses a distinct `info` string, giving
-  the two suites disjoint `(prefix, counter)` spaces.
+  derive the same chunk key. The nonce-prefix derivation below uses a
+  distinct `info` string, so the two suites' prefixes are *independent*
+  HKDF outputs, but their IV spaces are **not disjoint**: a `0x01` IV is
+  `P1[4] || uint64_be(i)` and, for `i < 2^32`, equals
+  `P1 || 00000000 || uint32_be(i)`, so whenever the `0x04` prefix `P2`
+  equals `P1 || 00000000` every chunk index of the two files shares a
+  (key, IV) pair. For a reused `(content_key, file_id)` this happens with
+  probability 2^-64. Writers MUST NOT reuse a `(content_key, file_id)`
+  pair across suites (or within one); the library's writers generate both
+  fresh per file unless the caller supplies them. A future AES-GCM suite
+  will bind the suite id into the chunk-key derivation (audit M5) so that
+  cross-suite reuse yields different keys.
 
 - `chunk_nonce(file_id, i)` =
   `HKDF-SHA-256(ikm=file_id, salt=zeros(32), info="shieldfive/v1/aes-gcm-v2/nonce-prefix", L=8)`
@@ -412,7 +421,8 @@ files written before `0x04` existed stay readable.
   4-byte prefix and an 8-byte counter. Widening the prefix shrinks the
   cross-file `(prefix, counter)` collision space (for two files that reuse
   a `content_key` — which never happens under correct use, but defense in
-  depth) from 2^32 to 2^64. The trade is a per-file chunk ceiling of 2^32
+  depth) from 2^32 to 2^64. This bound is probabilistic, not structural;
+  see the cross-suite note above. The trade is a per-file chunk ceiling of 2^32
   chunks rather than 2^64; this is far above the format's
   `MAX_TOTAL_CHUNKS` bound (1e9), so it is not a practical constraint.
   Readers MUST reject a `0x04` file whose `total_chunks` exceeds 2^32. The
