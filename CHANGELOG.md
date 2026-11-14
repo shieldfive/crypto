@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 1.1.1 — 2026-11-14
+
 ### Documentation
 
 - `spec/format-v1.md`: suites `0x01` and `0x04` were described as having
