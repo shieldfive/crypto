@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Documentation
+
+- `spec/format-v1.md`: suites `0x01` and `0x04` were described as having
+  disjoint `(prefix, counter)` IV spaces. They do not: they share a chunk key
+  and their IVs coincide when the `0x04` prefix equals the `0x01` prefix
+  followed by four zero bytes, probability 2^-64 for a reused
+  `(content_key, file_id)`. The spec now states that bound and forbids
+  reusing the pair across suites. Informational, no reachable impact; the
+  library's writers create a fresh pair per file. No code change (#76).
+  Reported by an external researcher.
+
 ## 1.1.0 — 2026-10-22
 
 ### Added
