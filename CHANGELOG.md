@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Security
+
+- `deriveMlKemKeypair` (and `createIdentity`) now throw a `RangeError` for a
+  master secret shorter than 16 bytes, matching the inbound key derivations.
+  An empty secret used to yield a fixed, publicly recomputable ML-KEM-1024
+  keypair, silently reducing Suite 0x03 to classical-only. Low. Reported by
+  ohex (GitHub: Ohex00).
+
+### Documentation
+
+- `signatureRequired` on both streaming decryptors now states on the option
+  itself that plaintext chunks are emitted before the signature is verified
+  at flush. Reported by ohex (GitHub: Ohex00).
+
 ## 1.1.1 — 2026-11-14
 
 ### Documentation
