@@ -138,6 +138,14 @@ export function generateMlKemKeypair(): {
 export async function deriveMlKemKeypair(
   masterSecret: Uint8Array,
 ): Promise<{ publicKey: Uint8Array; secretKey: Uint8Array }> {
+  // An empty or short secret would yield a keypair anyone can recompute,
+  // silently dropping the post-quantum half of the hybrid. Same floor as
+  // deriveInboundStaticKeypair / deriveInboundSigningKeypair.
+  if (masterSecret.length < 16) {
+    throw new RangeError(
+      'deriveMlKemKeypair: masterSecret must be at least 16 bytes',
+    )
+  }
   const seed = await hkdfSha256({
     ikm: masterSecret,
     info: HKDF_INFO.ML_KEM_1024_SEED,

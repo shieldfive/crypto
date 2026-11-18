@@ -302,6 +302,9 @@ export interface AesGcmV1DecryptStreamOptions {
    * (which must then be supplied). Use this wherever the caller relies
    * on sender attribution: without it, an unsigned or wrongly-signed file
    * still decrypts and only `signature.verified` tells them apart.
+   * Streaming: the signature is checked at flush, AFTER every plaintext
+   * chunk has been emitted. Do not act on the output until the stream
+   * completes without error; treat a stream error as a rejection.
    * Defaults to false (legacy/unsigned files decrypt as before).
    */
   signatureRequired?: boolean
